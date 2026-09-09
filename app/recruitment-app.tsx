@@ -1191,7 +1191,7 @@ export default function RecruitmentApp() {
           </main>
         </>
       ) : (
-        <main className="container workspace">
+        <main className={'container workspace' + (view === 'chat' ? ' chat-page' : '')}>
           {u && ['chat', 'interviews', 'email'].includes(view) && (
             <CommunicationPanel
               key={view + u.id}

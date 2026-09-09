@@ -314,7 +314,7 @@ function Chat({
   );
   return (
     <>
-      <div className="page-heading">
+      <div className="page-heading chat-page-heading">
         <div className="eyebrow">TRAO ĐỔI TUYỂN DỤNG</div>
         <h1>Tin nhắn</h1>
         <p>
@@ -331,6 +331,7 @@ function Chat({
       <div className={'chat-workspace ' + (active ? 'thread-active' : '')}>
         <aside className="thread-list">
           <div className="thread-search">
+            <div className="thread-list-heading"><h2>Cuộc trò chuyện</h2><span>{threads.length}</span></div>
             <input
               aria-label="Tìm cuộc trò chuyện"
               placeholder="Tìm người, công ty hoặc vị trí…"
@@ -348,6 +349,7 @@ function Chat({
                   'thread-item ' +
                   (active === t.application_id ? 'selected' : '')
                 }
+                aria-pressed={active === t.application_id}
                 onClick={() => setActive(t.application_id)}
               >
                 <div className="thread-avatar">
@@ -371,10 +373,12 @@ function Chat({
             ))
           )}
           {!loading && !shown.length && (
-            <Empty>
-              Chưa có cuộc trò chuyện. Cuộc trao đổi xuất hiện sau khi ứng
-              tuyển.
-            </Empty>
+            <div className="thread-empty" role="status">
+              <MessageSquare size={28} />
+              <h3>{filter.trim() ? 'Không tìm thấy cuộc trò chuyện' : 'Chưa có cuộc trò chuyện'}</h3>
+              <p>{filter.trim() ? 'Thử tên người, công ty hoặc vị trí khác.' : user.role === 'candidate' ? 'Sau khi ứng tuyển, bạn có thể trao đổi với nhà tuyển dụng tại đây.' : 'Cuộc trò chuyện sẽ xuất hiện khi có ứng viên nộp hồ sơ.'}</p>
+              {filter.trim() ? <button className="text-button" onClick={() => setFilter('')}>Xóa tìm kiếm</button> : user.role === 'candidate' ? <a className="outline-button" href="/?view=jobs">Khám phá việc làm</a> : null}
+            </div>
           )}
         </aside>
         <section className="chat-main">
@@ -469,7 +473,12 @@ function Chat({
               </p>
             </>
           ) : (
-            <Empty>Chọn một cuộc trò chuyện để xem tin nhắn.</Empty>
+            <div className="chat-welcome">
+              <span className="chat-welcome-icon"><MessageSquare size={32} /></span>
+              <h2>Kết nối cho cơ hội tiếp theo</h2>
+              <p>Chọn một cuộc trò chuyện bên trái để xem tin nhắn và trao đổi về vị trí ứng tuyển.</p>
+              <span className="chat-privacy-note">Nội dung chỉ hiển thị cho bạn và bên tuyển dụng liên quan.</span>
+            </div>
           )}
         </section>
       </div>
