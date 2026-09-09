@@ -123,7 +123,7 @@ export async function GET(req: Request) {
     }
     const params = new URL(req.url).searchParams;
     const savedView = params.get('saved') === '1';
-    if (savedView) for (const key of ['q','location','category','experience','type','salary','sort']) params.delete(key);
+    if (savedView) for (const key of ['q','location','category','experience','type','salary','sort','company']) params.delete(key);
     const q = str(params.get('q'), 150),
       location = str(params.get('location'), 150),
       category = str(params.get('category'), 150),
@@ -133,6 +133,7 @@ export async function GET(req: Request) {
     const page = Math.max(1, Math.min(100000, Number(params.get('page')) || 1));
     const filters = savedView ? ["j.status IN ('active','expired','closed')", "c.status!='blocked'"] : ['j.status=?', 'j.deadline>=?', "c.status!='blocked'"];
     const args: unknown[] = savedView ? [] : ['active', today()];
+    if (params.get('company')) { filters.push('j.company_id=?'); args.push(str(params.get('company'),100)); }
     if (q) {
       filters.push('(j.title LIKE ? OR c.name LIKE ? OR j.tags LIKE ?)');
       args.push('%' + q + '%', '%' + q + '%', '%' + q + '%');
@@ -201,6 +202,9 @@ export async function GET(req: Request) {
       )
         detail = decorate(j);
     }
+    if (detail) {
+      detail.related = (await all(jobSelect + " WHERE j.id!=? AND j.category=? AND j.status='active' AND j.deadline>=? AND c.status!='blocked' ORDER BY (j.specialty=? AND j.specialty!='') DESC,j.created_at DESC LIMIT 4", detail.id,detail.category,today(),detail.specialty)).map(decorate);
+    }
     const data: any = {
       user: u,
       jobs,
@@ -211,8 +215,9 @@ export async function GET(req: Request) {
         'SELECT * FROM categories WHERE is_active=1 ORDER BY name',
       ),
       companies: await all(
-        "SELECT id,name,description,address,website,status,is_demo FROM companies WHERE status!='blocked' ORDER BY name",
+        "SELECT c.id,c.name,c.description,c.address,c.website,c.status,c.is_demo,(SELECT count(*) FROM jobs j WHERE j.company_id=c.id AND j.status='active' AND j.deadline>=?) active_jobs FROM companies c WHERE c.status!='blocked' ORDER BY c.name", today(),
       ),
+      followedCompanies: [],
       saved: [],
       applications: [],
       resumes: [],
@@ -236,6 +241,7 @@ export async function GET(req: Request) {
       u.id,
     );
     if (u.role === 'candidate') {
+      data.followedCompanies = (await all('SELECT company_id FROM company_follows WHERE candidate_id=?',u.id)).map(row => row.company_id);
       data.saved = (
         await all('SELECT job_id FROM saved_jobs WHERE candidate_id=?', u.id)
       ).map((x) => x.job_id);
@@ -302,6 +308,15 @@ async function mutate(req: Request) {
         403,
       );
     const ref = str(b.id, 100);
+    if (action === 'follow-company') {
+      role('candidate');
+      check(typeof b.follow === 'boolean','Trạng thái theo dõi không hợp lệ.');
+      const company = await one('SELECT id,status FROM companies WHERE id=?',ref);
+      check(company && company.status !== 'blocked','Không tìm thấy công ty.',404);
+      if (b.follow) await stmt('INSERT OR IGNORE INTO company_follows(candidate_id,company_id,created_at) VALUES(?,?,?)',u.id,ref,now()).run();
+      else await stmt('DELETE FROM company_follows WHERE candidate_id=? AND company_id=?',u.id,ref).run();
+      return response({ok:true});
+    }
     if (action === 'profile') {
       const name = required(b.name, 'họ tên', 150);
       await db().batch([

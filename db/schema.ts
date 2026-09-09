@@ -136,6 +136,11 @@ export const saved = sqliteTable(
   },
   (t) => [uniqueIndex('uq_saved_candidate_job').on(t.candidate_id, t.job_id)],
 );
+export const companyFollows = sqliteTable('company_follows', {
+  candidate_id: text().notNull().references(() => users.id),
+  company_id: text().notNull().references(() => companies.id),
+  created_at: text().notNull(),
+}, t => [uniqueIndex('uq_company_follow').on(t.candidate_id, t.company_id), index('idx_company_follow_company').on(t.company_id)]);
 export const notifications = sqliteTable(
   'notifications',
   {

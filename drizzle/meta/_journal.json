@@ -29,6 +29,13 @@
       "when": 1788955448164,
       "tag": "0003_chilly_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788971506085,
+      "tag": "0004_bizarre_blink",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 'use client';
 import { locations, normalizeLocation } from '@/lib/locations';
+import ProfileChecklist from './profile-checklist';
 import OccupationPicker from './occupation-picker';
 import { specialties } from '@/lib/occupations';
 import UserAvatar from './user-avatar';
@@ -261,6 +262,11 @@ export default function RecruitmentApp() {
     }, 3000);
     return () => window.clearTimeout(timer);
   }, [message]);
+  const [companyId, setCompanyId] = useState('');
+  const [companySearch, setCompanySearch] = useState('');
+  const [onlyFollowed, setOnlyFollowed] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
+  const jobRequest = useRef(0);
   const [q, setQ] = useState(''),
     [query, setQuery] = useState(''),
     [location, setLocation] = useState(''),
@@ -339,6 +345,7 @@ export default function RecruitmentApp() {
     setLoading(true);
     try {
       const p = new URLSearchParams({
+        company: companyId,
         q: query,
         location,
         category,
@@ -357,10 +364,11 @@ export default function RecruitmentApp() {
     } finally {
       if (n === generation.current) setLoading(false);
     }
-  }, [query, location, category, experience, type, salary, sort, page, view]);
+  }, [companyId, query, location, category, experience, type, salary, sort, page, view]);
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     setView(p.get('view') || 'jobs');
+    setCompanyId(p.get('company') || '');
     setQuery(p.get('q') || '');
     setQ(p.get('q') || '');
     setReady(true);
@@ -415,6 +423,7 @@ export default function RecruitmentApp() {
     return true;
   };
   function reset() {
+    setCompanyId('');
     setQ('');
     setQuery('');
     setLocation('');
@@ -425,13 +434,31 @@ export default function RecruitmentApp() {
     setPage(1);
   }
   async function showJob(j: any) {
+    const request = ++jobRequest.current;
+    setShareMessage('');
     setSelected(j);
     try {
       const d = await api('/api/data?job=' + encodeURIComponent(j.id));
-      if (d.detail) setSelected(d.detail);
+      if (d.detail && request === jobRequest.current) setSelected(d.detail);
     } catch (e) {
       setMessage({ text: (e as Error).message, error: true });
     }
+  }
+  useEffect(() => {
+    const job = new URLSearchParams(window.location.search).get('job');
+    if (!job) return;
+    let cancelled = false;
+    api('/api/data?job=' + encodeURIComponent(job)).then(d => {
+      if (!cancelled && d.detail) setSelected(d.detail);
+      else if (!cancelled) setMessage({ text: 'Tin này không còn công khai hoặc không tồn tại.', error: true });
+    }).catch(() => { if (!cancelled) setMessage({ text: 'Chưa tải được tin tuyển dụng.', error: true }); });
+    return () => { cancelled = true; };
+  }, []);
+  async function shareJob() {
+    if (!selected) return;
+    const url = new URL('/', window.location.origin); url.searchParams.set('job',selected.id);
+    try { await navigator.clipboard.writeText(url.href); setShareMessage('Đã sao chép liên kết.'); }
+    catch { setShareMessage(url.href); }
   }
   function apply(j: any) {
     if (!mustLogin()) return;
@@ -1056,6 +1083,7 @@ export default function RecruitmentApp() {
               {filters}
             </aside>}
             <section>
+              {companyId && <div className="company-filter-chip">Công ty: {data.companies.find((c: any) => c.id === companyId)?.name || 'Đã chọn'} <button className="text-button" onClick={() => { setCompanyId(''); setPage(1); }}>Bỏ lọc công ty</button></div>}
               <div className="results-heading">
                 <div>
                   <h2>
@@ -1194,8 +1222,12 @@ export default function RecruitmentApp() {
                 <h1>Tìm nơi bạn muốn gắn bó.</h1>
                 <p>Thông tin doanh nghiệp và cơ hội tuyển dụng.</p>
               </div>
+              <div className="company-discovery-toolbar">
+                <input aria-label="Tìm công ty" placeholder="Tìm theo tên, lĩnh vực hoặc địa chỉ công ty…" value={companySearch} onChange={e => setCompanySearch(e.target.value)} />
+                {u?.role === 'candidate' && <label className="filter-option"><Checkbox checked={onlyFollowed} onCheckedChange={v => setOnlyFollowed(!!v)} />Đang theo dõi</label>}
+              </div>
               <div className="company-grid">
-                {data.companies.map((c: any) => (
+                {data.companies.filter((c: any) => (c.name + ' ' + c.description + ' ' + c.address).toLocaleLowerCase('vi').includes(companySearch.trim().toLocaleLowerCase('vi')) && (!onlyFollowed || (data.followedCompanies || []).includes(c.id))).map((c: any) => (
                   <article className="panel" key={c.id}>
                     <div className="company-logo">
                       <Building2 />
@@ -1204,14 +1236,16 @@ export default function RecruitmentApp() {
                     <p className="muted">{c.address}</p>
                     {c.status === 'verified' && <Badge status="verified" />}
                     <p>{c.description}</p>
+                    <p className="company-job-count">{c.active_jobs || 0} việc làm đang tuyển</p>
+                    {(!u || u.role === 'candidate') && <button className="outline-button company-follow" disabled={busy} onClick={() => { if (mustLogin()) void run({ action: 'follow-company', id: c.id, follow: !(data.followedCompanies || []).includes(c.id) }, (data.followedCompanies || []).includes(c.id) ? 'Đã bỏ theo dõi công ty.' : 'Đã theo dõi. Bạn sẽ được thông báo khi công ty có tin mới.'); }}>{(data.followedCompanies || []).includes(c.id) ? '✓ Đang theo dõi' : '+ Theo dõi công ty'}</button>}
                     {c.is_demo === 1 && (
                       <p className="sample-note">Doanh nghiệp giả lập</p>
                     )}
                     <button
                       className="text-button"
                       onClick={() => {
-                        setQuery(c.name);
-                        setQ(c.name);
+                        reset();
+                        setCompanyId(c.id);
                         navigate('jobs');
                       }}
                     >
@@ -1220,8 +1254,8 @@ export default function RecruitmentApp() {
                   </article>
                 ))}
               </div>
-              {!data.companies.length && (
-                <Empty title="Chưa có doanh nghiệp">
+              {!data.companies.filter((c: any) => (c.name + ' ' + c.description + ' ' + c.address).toLocaleLowerCase('vi').includes(companySearch.trim().toLocaleLowerCase('vi')) && (!onlyFollowed || (data.followedCompanies || []).includes(c.id))).length && (
+                <Empty title="Chưa có công ty phù hợp">
                   Thông tin doanh nghiệp sẽ xuất hiện khi nhà tuyển dụng hoàn
                   thiện hồ sơ.
                 </Empty>
@@ -1253,6 +1287,7 @@ export default function RecruitmentApp() {
                   Chỉnh sửa hồ sơ
                 </button>
               </div>
+              <ProfileChecklist profile={data.profile} hasResume={data.resumes.length > 0} onEdit={() => open('profile', { ...data.profile, name: u.name })} />
               <div className="profile-grid">
                 <section className="panel">
                   <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} large />
@@ -1995,7 +2030,7 @@ export default function RecruitmentApp() {
       <Sheet
         open={!!selected}
         onOpenChange={(v) => {
-          if (!v) setSelected(null);
+          if (!v) { ++jobRequest.current; setSelected(null); setShareMessage(''); }
         }}
       >
         <SheetContent className="job-sheet" side="right">
@@ -2007,6 +2042,8 @@ export default function RecruitmentApp() {
           </SheetHeader>
           {selected && (
             <div className="detail-content">
+              <button className="outline-button" onClick={shareJob}>Sao chép liên kết việc làm</button>
+              {shareMessage && <p className="share-result" role="status">{shareMessage}</p>}
               <div className="detail-summary">
                 <strong>
                   {selected.salary_min}–{selected.salary_max} triệu / tháng
@@ -2038,6 +2075,7 @@ export default function RecruitmentApp() {
                   </p>
                 </section>
               ))}
+              {!!selected.related?.length && <section className="related-jobs"><h3>Việc làm liên quan</h3><p className="muted">Cùng nhóm nghề, ưu tiên cùng chuyên môn.</p>{selected.related.map((job: any) => <button className="related-job" key={job.id} onClick={() => void showJob(job)}><strong>{job.title}</strong><span>{job.company_name} · {job.location}</span><span>{job.salary_min}–{job.salary_max} triệu / tháng</span></button>)}</section>}
               {selected.reason && (
                 <p className="reason">Lý do kiểm duyệt: {selected.reason}</p>
               )}
