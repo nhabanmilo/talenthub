@@ -252,6 +252,13 @@ export default function RecruitmentApp() {
     [message, setMessage] = useState<{ text: string; error?: boolean } | null>(
       null,
     );
+  useEffect(() => {
+    if (message?.error || message?.text !== 'Đăng nhập thành công.') return;
+    const timer = window.setTimeout(() => {
+      setMessage(current => current === message ? null : current);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
   const [q, setQ] = useState(''),
     [query, setQuery] = useState(''),
     [location, setLocation] = useState(''),
