@@ -1,3 +1,4 @@
+import { categoryFilterNames } from '@/lib/category-groups';
 import { remindSavedJobs } from '@/lib/saved-job-reminders';
 import { normalizeLocation, locationAliases } from '@/lib/locations';
 import { deliverSafely } from '@/lib/mail';
@@ -134,6 +135,11 @@ export async function GET(req: Request) {
       filters.push('(j.title LIKE ? OR c.name LIKE ? OR j.tags LIKE ?)');
       args.push('%' + q + '%', '%' + q + '%', '%' + q + '%');
     }
+    if (category) {
+      const categories = categoryFilterNames(category);
+      filters.push('j.category IN (' + categories.map(() => '?').join(',') + ')');
+      args.push(...categories);
+    }
     if (location) {
       const names = locationAliases(location);
       filters.push('j.location IN (' + names.map(() => '?').join(',') + ')');
@@ -141,7 +147,7 @@ export async function GET(req: Request) {
     }
     for (const [k, v] of [
       
-      ['category', category],
+
       ['experience', experience],
       ['type', type],
     ])

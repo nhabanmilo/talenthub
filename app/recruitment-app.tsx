@@ -1,5 +1,6 @@
 'use client';
 import { locations, normalizeLocation } from '@/lib/locations';
+import { visibleCategoryGroups } from '@/lib/category-groups';
 import UserAvatar from './user-avatar';
 import CommunicationPanel from './communication-panel';
 import {
@@ -645,17 +646,20 @@ export default function RecruitmentApp() {
       </div>
       <hr />
       <h4>Ngành nghề</h4>
-      {categoryOptions.map((c: string) => (
-        <label className="filter-option" key={c}>
-          <Checkbox
-            checked={category === c}
-            onCheckedChange={(v) => {
-              setCategory(v ? c : '');
-              setPage(1);
-            }}
-          />
-          {c}
-        </label>
+      {visibleCategoryGroups(categoryOptions).map(group => (
+        <details className="industry-group" key={group.id} open={group.children.includes(category) || category === '@group:' + group.id || undefined}>
+          <summary><span>{group.name}</span><small>{group.children.length}</small></summary>
+          <div className="industry-children">
+            {group.id !== 'other' && group.children.length > 1 && <label className="filter-option industry-all">
+              <Checkbox checked={category === '@group:' + group.id} onCheckedChange={v => { setCategory(v ? '@group:' + group.id : ''); setPage(1); }} />
+              Tất cả trong nhóm
+            </label>}
+            {group.children.map(c => <label className="filter-option" key={c}>
+              <Checkbox checked={category === c} onCheckedChange={v => { setCategory(v ? c : ''); setPage(1); }} />
+              {c}
+            </label>)}
+          </div>
+        </details>
       ))}
       <hr />
       <h4>Mức lương</h4>

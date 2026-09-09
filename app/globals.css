@@ -1926,3 +1926,14 @@ input:not([type='checkbox']):not([type='file']), textarea { border-radius: 10px;
 
 .saved-job-layout { display: block; max-width: 1060px; margin-top: 30px; margin-bottom: 40px; }
 .saved-job-layout .results-heading { margin-bottom: 24px; }
+
+.industry-group { border-bottom: 1px solid #e8eee6; padding: 4px 0; }
+.industry-group summary { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 10px 0; color: #294f42; font-size: 13px; font-weight: 600; list-style: none; }
+.industry-group summary::before { content: "›"; font-size: 20px; transition: transform .15s; }
+.industry-group[open] summary::before { transform: rotate(90deg); }
+.industry-group summary span { flex: 1; }
+.industry-group summary small { border-radius: 12px; background: #edf3e9; padding: 1px 7px; font-size: 11px; }
+.industry-children { border-left: 2px solid #deeadf; padding-left: 12px; margin: 0 0 12px 5px; }
+.industry-children .filter-option { align-items: flex-start; font-size: 12px; line-height: 1.7; gap: 9px; }
+.industry-children .filter-option button { flex-shrink: 0; margin-top: 3px; }
+.industry-all { color: #146c62; font-weight: 600; }
