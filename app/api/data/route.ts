@@ -1,3 +1,4 @@
+import { normalizeLocation, locationAliases } from '@/lib/locations';
 import { deliverSafely } from '@/lib/mail';
 import {
   all,
@@ -100,6 +101,7 @@ function decorate(j: any) {
   const sample = sampleJobs.find((x) => x.company_name === j.company_name);
   return {
     ...j,
+    location: normalizeLocation(j.location),
     tags: JSON.parse(j.tags || '[]'),
     initials: sample?.initials || j.company_name.slice(0, 2),
     color: sample?.color || '#187955',
@@ -125,8 +127,13 @@ export async function GET(req: Request) {
       filters.push('(j.title LIKE ? OR c.name LIKE ? OR j.tags LIKE ?)');
       args.push('%' + q + '%', '%' + q + '%', '%' + q + '%');
     }
+    if (location) {
+      const names = locationAliases(location);
+      filters.push('j.location IN (' + names.map(() => '?').join(',') + ')');
+      args.push(...names);
+    }
     for (const [k, v] of [
-      ['location', location],
+      
       ['category', category],
       ['experience', experience],
       ['type', type],
@@ -282,7 +289,7 @@ async function mutate(req: Request) {
         stmt(
           'UPDATE profiles SET phone=?,location=?,headline=?,skills=?,experience_summary=?,date_of_birth=? WHERE user_id=?',
           str(b.phone, 20),
-          str(b.location, 150),
+          normalizeLocation(str(b.location, 150)),
           str(b.headline, 255),
           str(b.skills, 2000),
           str(b.experience_summary, 5000),
@@ -488,7 +495,7 @@ async function mutate(req: Request) {
         required(b.description, 'mô tả công việc', 10000),
         required(b.requirements, 'yêu cầu', 10000),
         required(b.benefits, 'quyền lợi', 10000),
-        required(b.location, 'địa điểm', 200),
+        normalizeLocation(required(b.location, 'địa điểm', 200)),
         min,
         max,
         deadline,

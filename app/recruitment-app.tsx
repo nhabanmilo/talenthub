@@ -1,4 +1,6 @@
 'use client';
+import { locations, normalizeLocation } from '@/lib/locations';
+import UserAvatar from './user-avatar';
 import CommunicationPanel from './communication-panel';
 import {
   useState,
@@ -119,15 +121,6 @@ const blank = {
   company: null,
   stats: {},
 };
-const locations = [
-  'TP. Hồ Chí Minh',
-  'Hà Nội',
-  'Đà Nẵng',
-  'Cần Thơ',
-  'Hải Phòng',
-  'Bình Dương',
-  'Làm việc từ xa',
-];
 const experiences = [
   'Chưa có kinh nghiệm',
   'Dưới 1 năm',
@@ -286,6 +279,35 @@ export default function RecruitmentApp() {
   }
   const generation = useRef(0);
   const u = data.user;
+  const [avatarRevision, setAvatarRevision] = useState(0);
+  async function changeAvatar(file?: File) {
+    setBusy(true);
+    try {
+      let body: FormData | undefined;
+      if (file) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) throw new Error('Chọn ảnh JPG, PNG hoặc WebP, tối đa 2 MB.');
+        // Decode and re-encode before upload to remove metadata and cap dimensions.
+        const bitmap = await createImageBitmap(file);
+        const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Không thể xử lý ảnh.');
+        context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+        if (!blob) throw new Error('Không thể đọc ảnh.');
+        body = new FormData(); body.append('file', blob, 'avatar.jpg');
+      }
+      const res = await fetch('/api/avatar', { method: file ? 'POST' : 'DELETE', body });
+      const result: any = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Không thể cập nhật ảnh.');
+      setAvatarRevision(v => v + 1);
+      setMessage({ text: file ? 'Đã cập nhật ảnh đại diện.' : 'Đã xóa ảnh đại diện.' });
+    } catch (e) { setMessage({ text: (e as Error).message, error: true }); }
+    finally { setBusy(false); }
+  }
   const load = useCallback(async () => {
     const n = ++generation.current;
     setLoading(true);
@@ -869,16 +891,17 @@ export default function RecruitmentApp() {
                   navigate(u.role === 'candidate' ? 'profile' : 'dashboard')
                 }
               >
-                <span>{u.name.slice(0, 1).toUpperCase()}</span>
+                <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} />
                 <span>{u.name.split(' ').slice(-2).join(' ')}</span>
               </button>
               <button
+                className="logout-button"
                 aria-label="Đăng xuất"
                 title="Đăng xuất"
                 disabled={busy}
                 onClick={logout}
               >
-                <LogOut size={17} />
+                <LogOut size={17} /> <span>Đăng xuất</span>
               </button>
             </>
           ) : (
@@ -1213,7 +1236,15 @@ export default function RecruitmentApp() {
               </div>
               <div className="profile-grid">
                 <section className="panel">
-                  <div className="avatar-large">{u.name[0]}</div>
+                  <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} large />
+                  <div className="avatar-controls">
+                    <label className="outline-button avatar-upload">
+                      Đổi ảnh đại diện
+                      <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} aria-label="Chọn ảnh đại diện" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void changeAvatar(f); }} />
+                    </label>
+                    <button className="text-button" disabled={busy} onClick={() => void changeAvatar()}>Xóa ảnh</button>
+                  </div>
+                  <p className="muted">Chọn ảnh đang dùng trên Google hoặc ảnh từ máy. JPG, PNG, WebP; tối đa 2 MB.</p>
                   <h2>{u.name}</h2>
                   <p>
                     {data.profile?.headline || 'Chưa có tiêu đề nghề nghiệp'}
@@ -1221,7 +1252,7 @@ export default function RecruitmentApp() {
                   <div className="profile-details">
                     <p>{u.email}</p>
                     <p>{data.profile?.phone || 'Chưa có số điện thoại'}</p>
-                    <p>{data.profile?.location || 'Chưa có địa điểm'}</p>
+                    <p>{normalizeLocation(data.profile?.location || '') || 'Chưa có địa điểm'}</p>
                   </div>
                   <h3>Kỹ năng</h3>
                   <p className="preline">
@@ -2246,12 +2277,9 @@ export default function RecruitmentApp() {
                     value={form.date_of_birth}
                     onChange={set('date_of_birth')}
                   />
-                  <Field
-                    label="Địa điểm"
-                    name="location"
-                    value={form.location}
-                    onChange={set('location')}
-                  />
+                  <Field label="Tỉnh / thành phố" name="location">
+                    <Pick value={normalizeLocation(form.location || '')} onChange={set('location')} options={locations} empty="Chọn tỉnh / thành phố" label="Tỉnh / thành phố" />
+                  </Field>
                   <Field
                     wide
                     label="Tiêu đề nghề nghiệp"
@@ -2369,7 +2397,7 @@ export default function RecruitmentApp() {
                     </Field>
                     <Field label="Địa điểm" name="location" required>
                       <Pick
-                        value={form.location || ''}
+                        value={normalizeLocation(form.location || '')}
                         onChange={set('location')}
                         options={locations}
                         empty="Chọn địa điểm"

@@ -547,7 +547,7 @@ footer {
   .topbar {
     gap: 24px;
   }
-  .header-actions > button:last-child,
+  .header-actions > button:last-child:not(.logout-button),
   .separator {
     display: none;
   }
@@ -1802,3 +1802,18 @@ footer .text-button {
     flex-wrap: wrap;
   }
 }
+
+/* Account actions must remain visible at every viewport width. */
+.header-actions .logout-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 40px; }
+@media (max-width: 480px) {
+  .topbar .header-actions { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .header-actions .logout-button { font-size: 13px; padding: 6px 8px; }
+}
+
+.account-avatar { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: #e5f1eb; color: #187955; font-weight: 700; }
+.account-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.account-avatar-large { width: 88px; height: 88px; font-size: 32px; }
+.avatar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 14px 0 8px; }
+.avatar-upload { position: relative; overflow: hidden; cursor: pointer; }
+.avatar-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.avatar-upload:focus-within { outline: 2px solid #187955; outline-offset: 3px; }
