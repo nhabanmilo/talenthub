@@ -1,6 +1,6 @@
 {
   "name": "talenthub",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -13,7 +13,9 @@
     "format": "oxfmt",
     "db:generate": "node scripts/db-generate.cjs",
     "db:local": "node scripts/db-local.mjs",
-    "test:api": "node scripts/test-api.mjs"
+    "test:api": "node scripts/test-api.mjs",
+    "test:extensions": "node scripts/test-extensions.mjs",
+    "test:mail": "node scripts/test-mail.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

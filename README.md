@@ -58,7 +58,7 @@ npm run test:api
 
 Mặc định bộ kiểm tra dùng `http://localhost:3001`. Có thể đặt `TEST_BASE_URL` theo cổng Local. Bộ kiểm tra tạo tài khoản và dữ liệu test; tạo quyền admin fixture qua D1 cục bộ, không gọi máy chủ sản xuất. Không chạy trên dữ liệu thật.
 
-Đã kiểm tra 52 trường hợp API xuyên suốt ba vai trò và kiểm tra TypeScript. Không thực hiện kiểm thử tương tác/ảnh chụp bằng trình duyệt. Có WebMCP `search_jobs` tùy khả năng trình duyệt; chưa xác minh bằng môi trường WebMCP hỗ trợ.
+Đã kiểm tra 107 trường hợp API xuyên suốt ba vai trò, bộ kiểm tra Resend với phản hồi mô phỏng và kiểm tra TypeScript. Chưa gửi email thật vì chưa có khóa Resend và địa chỉ gửi đã xác minh. Không thực hiện kiểm thử tương tác/ảnh chụp bằng trình duyệt. Có WebMCP `search_jobs` tùy khả năng trình duyệt; chưa xác minh bằng môi trường WebMCP hỗ trợ.
 
 ## Cấu trúc mã nguồn
 
@@ -74,4 +74,48 @@ Thay đổi schema bằng `npm run db:generate`, giữ nguyên migration đã tr
 
 ## Phạm vi phiên bản
 
-Đây là MVP phục vụ nghiệp vụ lõi. CV chỉ nhận PDF; thao tác xóa CV khỏi hồ sơ là xóa mềm để giữ lịch sử ứng tuyển. Một tài khoản nhà tuyển dụng quản lý một doanh nghiệp trong phiên bản này. Chưa triển khai nhiều nhân sự cùng một doanh nghiệp, khôi phục mật khẩu/email xác minh, email thông báo, lịch hẹn, chat, thanh toán, AI hoặc video phỏng vấn. Thông báo hiện có nằm trong website. Cần cấu hình dịch vụ email nếu mở rộng đăng ký công khai và khôi phục tài khoản.
+Đây là MVP phục vụ nghiệp vụ lõi. CV chỉ nhận PDF; thao tác xóa CV khỏi hồ sơ là xóa mềm để giữ lịch sử ứng tuyển. Một tài khoản nhà tuyển dụng quản lý một doanh nghiệp trong phiên bản này. Đã bổ sung chat theo hồ sơ ứng tuyển, lịch phỏng vấn và email thông báo qua Resend. Chưa triển khai nhiều nhân sự cùng một doanh nghiệp, khôi phục mật khẩu/email xác minh, thanh toán, AI hoặc video phỏng vấn tích hợp. Lịch trực tuyến sử dụng liên kết họp do nhà tuyển dụng cung cấp.
+
+
+## Chức năng mở rộng phiên bản 0.2
+
+### Chat
+
+Trong danh sách hồ sơ ứng tuyển, chọn **Nhắn tin** hoặc mở mục **Tin nhắn**. Hai bên trao đổi theo hồ sơ, có trạng thái đã đọc và tải tin nhắn cũ. Tin nhắn tự cập nhật mỗi 5 giây khi trang hiển thị; không dùng WebSocket. Gửi lại cùng mã yêu cầu không tạo tin trùng. Quản trị viên và nhà tuyển dụng không liên quan không được đọc hội thoại. Tài khoản/doanh nghiệp bị khóa không được gửi thêm.
+
+### Lịch phỏng vấn
+
+Nhà tuyển dụng chọn **Hẹn phỏng vấn**, điền giờ Việt Nam (UTC+7), hình thức, địa điểm hoặc liên kết HTTPS. Hỗ trợ đổi/hủy/hoàn thành lịch; ứng viên xác nhận hoặc từ chối kèm lời nhắn. Hệ thống kiểm tra trùng lịch trong chính lệnh ghi dữ liệu và ngăn cập nhật từ phiên bản cũ. Đổi lịch yêu cầu xác nhận lại. Tệp .ics có UID ổn định và số phiên bản để nhập vào ứng dụng lịch; không tự đồng bộ Google Calendar/Outlook, không tự tạo phòng họp.
+
+### Email Resend
+
+- Mọi thông báo mới tạo một mục email trong cùng giao dịch dữ liệu, thông qua trigger migration 0001. Không gửi lại các thông báo cũ từ trước nâng cấp.
+- Nội dung email là văn bản; chat chỉ gửi thông báo có tin mới, không gửi nguyên văn hội thoại hoặc CV.
+- Người dùng bật/tắt nhận email trong mục **Email**. Quản trị xem nhật ký, xử lý hàng đợi và gửi kiểm tra đến chính email đăng ký của mình.
+- Thiếu cấu hình: email giữ trạng thái chờ, không báo đã gửi. Có cấu hình: mỗi thao tác ghi nghiệp vụ xử lý tối đa 4 mục. Lỗi được giữ lại và thử lại với thời gian chờ tăng dần khi có lần xử lý tiếp theo. Tối đa 5 lần tự thử.
+- Khóa chống trùng Resend được giữ nguyên theo thông báo; khóa xử lý hàng đợi ngăn hai tiến trình cùng gửi. Sau 23 giờ từ lần gửi đầu mà chưa rõ kết quả, chuyển **Cần kiểm tra**, không tự gửi tiếp để tránh vượt thời hạn lưu khóa chống trùng của nhà cung cấp.
+- **Resend đã tiếp nhận** là API xác nhận tiếp nhận, không phải xác nhận đã vào hộp thư. Chưa tích hợp webhook giao thư/bounce.
+
+Cấu hình trong **môi trường Sites**, sau đó triển khai lại:
+
+| Biến | Giá trị |
+| --- | --- |
+| RESEND_API_KEY | API key Resend, đặt dạng secret |
+| EMAIL_FROM | TalentHub &lt;tuyendung@tenmien-da-xac-minh.vn&gt; |
+| APP_URL | URL thực của website |
+| MAIL_CRON_SECRET | Tùy chọn: secret ngẫu nhiên ít nhất 32 ký tự |
+
+Ở local, sao chép .env.example thành .dev.vars và điền các giá trị, rồi khởi động lại server. Không commit API key. Địa chỉ dùng .test, .invalid hoặc example.com/net/org sẽ không được gửi qua Resend.
+
+Nếu cần tự thử lại hàng đợi khi không có người dùng hoạt động, cấu hình bộ hẹn giờ HTTPS bên ngoài gọi POST /api/email/dispatch với Authorization: Bearer [MAIL_CRON_SECRET], ví dụ mỗi 5 phút. Endpoint đã có sẵn nhưng bộ hẹn giờ bên ngoài chưa được cấu hình. Không cần bộ hẹn giờ để gửi ngay theo thao tác nghiệp vụ; quản trị cũng có nút xử lý hàng đợi thủ công. Chưa có email nhắc trước giờ phỏng vấn.
+
+Tài liệu nhà cung cấp: [Gửi email](https://resend.com/docs/api-reference/emails/send-email), [Chống gửi trùng](https://resend.com/docs/dashboard/emails/idempotency-keys).
+
+Kiểm tra bổ sung (máy chủ local đang chạy):
+
+~~~sh
+npm run test:extensions
+npm run test:mail
+~~~
+
+Bộ test mail chỉ dùng fetch mô phỏng và không gửi email thật. Bộ test API tạo dữ liệu thử cục bộ, gồm kiểm tra cạnh tranh ghi chat/lịch và quyền sở hữu.

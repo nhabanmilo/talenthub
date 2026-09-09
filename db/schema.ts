@@ -165,3 +165,90 @@ export const setup = sqliteTable('setup', {
   id: text().primaryKey(),
   value: text().notNull(),
 });
+
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    application_id: text()
+      .notNull()
+      .references(() => applications.id),
+    sender_id: text()
+      .notNull()
+      .references(() => users.id),
+    client_id: text().notNull(),
+    body: text().notNull(),
+    read_at: text(),
+    created_at: text().notNull(),
+  },
+  (t) => [
+    uniqueIndex('uq_message_client').on(t.sender_id, t.client_id),
+    index('idx_messages_thread').on(t.application_id, t.id),
+  ],
+);
+
+export const interviews = sqliteTable(
+  'interviews',
+  {
+    id: text().primaryKey(),
+    application_id: text()
+      .notNull()
+      .references(() => applications.id),
+    employer_id: text()
+      .notNull()
+      .references(() => users.id),
+    candidate_id: text()
+      .notNull()
+      .references(() => users.id),
+    title: text().notNull(),
+    starts_at: text().notNull(),
+    ends_at: text().notNull(),
+    mode: text().notNull(),
+    location: text().notNull(),
+    notes: text().notNull().default(''),
+    status: text().notNull().default('scheduled'),
+    candidate_response: text().notNull().default('pending'),
+    response_note: text().notNull().default(''),
+    cancel_reason: text().notNull().default(''),
+    version: integer().notNull().default(1),
+    created_at: text().notNull(),
+    updated_at: text().notNull(),
+  },
+  (t) => [
+    index('idx_interviews_employer').on(t.employer_id, t.starts_at),
+    index('idx_interviews_candidate').on(t.candidate_id, t.starts_at),
+  ],
+);
+
+export const emailPreferences = sqliteTable('email_preferences', {
+  user_id: text()
+    .primaryKey()
+    .references(() => users.id),
+  enabled: integer().notNull().default(1),
+  updated_at: text().notNull(),
+});
+export const emailOutbox = sqliteTable(
+  'email_outbox',
+  {
+    id: text().primaryKey(),
+    user_id: text()
+      .notNull()
+      .references(() => users.id),
+    subject: text().notNull(),
+    body: text().notNull(),
+    status: text().notNull().default('pending'),
+    attempts: integer().notNull().default(0),
+    next_attempt_at: integer().notNull().default(0),
+    first_attempt_at: integer(),
+    lease_until: integer(),
+    lock_token: text(),
+    provider_id: text(),
+    last_error: text().notNull().default(''),
+    created_at: text().notNull(),
+    sent_at: text(),
+  },
+  (t) => [
+    index('idx_email_delivery').on(t.status, t.next_attempt_at),
+    index('idx_email_user').on(t.user_id),
+  ],
+);

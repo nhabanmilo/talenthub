@@ -1,4 +1,5 @@
 'use client';
+import CommunicationPanel from './communication-panel';
 import {
   useState,
   useEffect,
@@ -275,6 +276,14 @@ export default function RecruitmentApp() {
     [selected, setSelected] = useState<any>(null),
     [confirm, setConfirm] = useState<any>(null),
     [upload, setUpload] = useState<File | null>(null);
+  const [communicationTarget, setCommunicationTarget] = useState<{
+    applicationId: string;
+    create?: boolean;
+  } | null>(null);
+  function communicate(v: string, a: any) {
+    navigate(v);
+    setCommunicationTarget({ applicationId: a.id, create: v === 'interviews' });
+  }
   const generation = useRef(0);
   const u = data.user;
   const load = useCallback(async () => {
@@ -318,6 +327,7 @@ export default function RecruitmentApp() {
     if (ready) void load();
   }, [ready, load]);
   function navigate(v: string) {
+    setCommunicationTarget(null);
     setView(v);
     setPage(1);
     setStatusFilter('');
@@ -543,6 +553,7 @@ export default function RecruitmentApp() {
           ['manage-companies', 'Doanh nghiệp'],
           ['categories', 'Danh mục'],
           ['audit', 'Nhật ký'],
+          ['email', 'Email'],
         ]
       : u?.role === 'employer'
         ? [
@@ -550,6 +561,9 @@ export default function RecruitmentApp() {
             ['manage-jobs', 'Tin tuyển dụng'],
             ['applications', 'Ứng viên'],
             ['company', 'Doanh nghiệp'],
+            ['chat', 'Tin nhắn'],
+            ['interviews', 'Lịch phỏng vấn'],
+            ['email', 'Email'],
           ]
         : [
             ['jobs', 'Tìm việc làm'],
@@ -559,6 +573,9 @@ export default function RecruitmentApp() {
               ? ([
                   ['saved', 'Đã lưu'],
                   ['applications', 'Ứng tuyển'],
+                  ['chat', 'Tin nhắn'],
+                  ['interviews', 'Lịch phỏng vấn'],
+                  ['email', 'Email'],
                 ] as uNav[])
               : []),
           ];
@@ -749,6 +766,22 @@ export default function RecruitmentApp() {
                       Chi tiết
                     </button>
                   )}
+                  <div className="application-contact-actions">
+                    <button
+                      className="text-button"
+                      onClick={() => communicate('chat', a)}
+                    >
+                      Nhắn tin
+                    </button>
+                    {u?.role === 'employer' && (
+                      <button
+                        className="text-button"
+                        onClick={() => communicate('interviews', a)}
+                      >
+                        Hẹn phỏng vấn
+                      </button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -1102,6 +1135,16 @@ export default function RecruitmentApp() {
         </>
       ) : (
         <main className="container workspace">
+          {u && ['chat', 'interviews', 'email'].includes(view) && (
+            <CommunicationPanel
+              key={view + u.id}
+              view={view}
+              user={u}
+              applications={data.applications}
+              target={communicationTarget}
+              onChanged={() => void load()}
+            />
+          )}
           {view === 'companies' && (
             <>
               <div className="page-heading">
@@ -2092,8 +2135,9 @@ export default function RecruitmentApp() {
               báo và phân quyền.
               <br />
               <br />
-              Email thông báo, lịch phỏng vấn, chat và AI matching chưa được
-              tích hợp. Các tin mẫu được gắn nhãn minh họa.
+              Đã tích hợp chat, lịch phỏng vấn và hàng đợi email Resend. Gửi
+              email thật cần cấu hình dịch vụ. AI matching chưa được tích hợp.
+              Các tin mẫu được gắn nhãn minh họa.
             </div>
           ) : modal === 'applicationDetail' ? (
             <div className="form-stack">

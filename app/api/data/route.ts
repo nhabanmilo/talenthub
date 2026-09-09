@@ -1,3 +1,4 @@
+import { deliverSafely } from '@/lib/mail';
 import {
   all,
   one,
@@ -257,7 +258,7 @@ export async function GET(req: Request) {
     return error(e);
   }
 }
-export async function POST(req: Request) {
+async function mutate(req: Request) {
   try {
     csrf(req);
     const b: any = await req.json();
@@ -770,4 +771,10 @@ export async function POST(req: Request) {
   } catch (e) {
     return error(e);
   }
+}
+
+export async function POST(req: Request) {
+  const result = await mutate(req);
+  if (result.ok) await deliverSafely();
+  return result;
 }
