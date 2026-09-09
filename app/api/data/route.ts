@@ -1,3 +1,4 @@
+import { inferSpecialty, occupationSelection, specialties } from '@/lib/occupations';
 import { categoryFilterNames } from '@/lib/category-groups';
 import { remindSavedJobs } from '@/lib/saved-job-reminders';
 import { normalizeLocation, locationAliases } from '@/lib/locations';
@@ -68,7 +69,7 @@ async function seedCatalog() {
     const i = names.indexOf(j.company_name);
     ops.push(
       stmt(
-        'INSERT INTO jobs(id,company_id,created_by,category,title,description,requirements,benefits,location,salary_min,salary_max,deadline,status,experience,type,tags,created_at,updated_at,is_demo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)',
+        'INSERT INTO jobs(id,company_id,created_by,category,title,description,requirements,benefits,location,salary_min,salary_max,deadline,status,experience,type,tags,created_at,updated_at,is_demo,specialty) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
         j.id,
         'demo-company-' + i,
         'demo-employer-' + i,
@@ -87,6 +88,7 @@ async function seedCatalog() {
         JSON.stringify(j.tags),
         now(),
         now(),
+        inferSpecialty(j.category, j.title),
       ),
     );
   }
@@ -136,7 +138,12 @@ export async function GET(req: Request) {
       args.push('%' + q + '%', '%' + q + '%', '%' + q + '%');
     }
     if (category) {
-      const categories = categoryFilterNames(category);
+      const selection = occupationSelection(category);
+      if (selection) {
+        filters.push('j.specialty IN (' + selection.ids.map(() => '?').join(',') + ')');
+        args.push(...selection.ids);
+      }
+      const categories = selection ? [selection.category] : categoryFilterNames(category);
       filters.push('j.category IN (' + categories.map(() => '?').join(',') + ')');
       args.push(...categories);
     }
@@ -499,6 +506,8 @@ async function mutate(req: Request) {
         ),
         'Vui lòng chọn ngành nghề hợp lệ.',
       );
+      const specialty = str(b.specialty, 150) || inferSpecialty(str(b.category, 150), str(b.title, 200));
+      check(!specialty || specialties.some(s => s.id === specialty && s.category === str(b.category, 150)), 'Chuyên môn không thuộc nhóm nghề đã chọn.');
       const jid = ref || id();
       const values = [
         c.id,
@@ -542,6 +551,7 @@ async function mutate(req: Request) {
       );
       await db().batch([
         s,
+        stmt('UPDATE jobs SET specialty=? WHERE id=? AND created_by=?', specialty, jid, u.id),
         ...(b.draft
           ? []
           : admins.map((a) => notice(a.id, `Tin chờ duyệt: ${b.title}`))),
@@ -761,7 +771,7 @@ async function mutate(req: Request) {
         const i = names.indexOf(j.company_name);
         ops.push(
           stmt(
-            'INSERT INTO jobs(id,company_id,created_by,category,title,description,requirements,benefits,location,salary_min,salary_max,deadline,status,experience,type,tags,created_at,updated_at,is_demo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)',
+            'INSERT INTO jobs(id,company_id,created_by,category,title,description,requirements,benefits,location,salary_min,salary_max,deadline,status,experience,type,tags,created_at,updated_at,is_demo,specialty) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
             j.id,
             'demo-company-' + i,
             'demo-employer-' + i,
@@ -780,6 +790,7 @@ async function mutate(req: Request) {
             JSON.stringify(j.tags),
             now(),
             now(),
+        inferSpecialty(j.category, j.title),
           ),
         );
       }

@@ -63,6 +63,7 @@ export const jobs = sqliteTable(
       .notNull()
       .references(() => users.id),
     category: text().notNull(),
+    specialty: text().notNull().default(''),
     title: text().notNull(),
     description: text().notNull(),
     requirements: text().notNull(),

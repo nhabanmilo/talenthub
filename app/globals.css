@@ -1937,3 +1937,19 @@ input:not([type='checkbox']):not([type='file']), textarea { border-radius: 10px;
 .industry-children .filter-option { align-items: flex-start; font-size: 12px; line-height: 1.7; gap: 9px; }
 .industry-children .filter-option button { flex-shrink: 0; margin-top: 3px; }
 .industry-all { color: #146c62; font-weight: 600; }
+
+.occupation-trigger { width: 100%; justify-content: space-between; text-align: left; border: 1px solid #dbe6dd; border-radius: 10px; padding: 12px; font-size: 13px; background: #fff; }
+.occupation-dialog { width: min(980px, calc(100vw - 32px)) !important; max-width: 980px !important; max-height: 90dvh; overflow-y: auto; }
+.occupation-columns { display: grid; grid-template-columns: 1fr 1fr 1.15fr; border: 1px solid #e1e8df; border-radius: 12px; overflow: hidden; }
+.occupation-columns section { min-width: 0; border-right: 1px solid #e1e8df; }
+.occupation-columns section:last-child { border-right: 0; }
+.occupation-columns h3 { background: #f0f5ed; padding: 13px; font-size: 12px; text-transform: uppercase; }
+.occupation-options { height: 320px; overflow-y: auto; padding: 6px; }
+.occupation-options p { padding: 16px; color: #657d70; font-size: 13px; }
+.occupation-choice { display: flex; width: 100%; justify-content: space-between; text-align: left; padding: 11px 10px; border-radius: 7px; font-size: 13px; line-height: 1.6; gap: 8px; }
+.occupation-choice:hover, .occupation-choice.browsing { background: #edf5eb; color: #146c62; }
+.occupation-choice.chosen { background: #dceee1; color: #105b50; font-weight: 600; }
+.occupation-search-results { max-height: 340px; overflow-y: auto; }
+.occupation-search-results small { display: block; padding: 0 10px 12px; color: #6a7d70; }
+.occupation-selection { font-size: 13px; padding: 10px 0; }
+@media(max-width: 640px) { .occupation-columns { grid-template-columns: 1fr; } .occupation-columns section { border-right: 0; border-bottom: 1px solid #e1e8df; } .occupation-options { height: auto; max-height: 180px; } .occupation-dialog { padding: 18px !important; } }
