@@ -119,3 +119,10 @@ npm run test:mail
 ~~~
 
 Bộ test mail chỉ dùng fetch mô phỏng và không gửi email thật. Bộ test API tạo dữ liệu thử cục bộ, gồm kiểm tra cạnh tranh ghi chat/lịch và quyền sở hữu.
+
+### Nhắc hạn tin đã lưu
+- Mục Đã lưu không áp dụng bộ lọc tìm kiếm; hiển thị cả tin đã hết hạn/đóng để người dùng quản lý.
+- Tạo thông báo web và hàng đợi email một lần cho mỗi ứng viên + tin + hạn nộp, trong khoảng còn 0–2 ngày theo giờ Việt Nam. Bỏ qua tin đã ứng tuyển, đã bỏ lưu, doanh nghiệp bị khóa và tài khoản không hoạt động.
+- Kiểm tra khi ứng viên tải dữ liệu website. POST /api/email/dispatch cũng kiểm tra toàn bộ tin đã lưu trước khi xử lý hàng đợi.
+- Muốn chạy khi người dùng không mở web, cần cấu hình lịch gọi endpoint hằng ngày (khuyến nghị 08:00 Asia/Ho_Chi_Minh), kèm Bearer MAIL_CRON_SECRET và quyền truy cập Site riêng tư. Lịch nền chưa được cấp trên bản triển khai này. Email thật cần RESEND_API_KEY và EMAIL_FROM đã xác minh.
+- Kiểm tra: node scripts/test-saved-reminders.mjs.

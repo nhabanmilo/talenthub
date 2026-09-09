@@ -1,3 +1,4 @@
+import { remindSavedJobs } from '@/lib/saved-job-reminders';
 import { normalizeLocation, locationAliases } from '@/lib/locations';
 import { deliverSafely } from '@/lib/mail';
 import {
@@ -113,7 +114,13 @@ export async function GET(req: Request) {
   try {
     await seedCatalog();
     const u = await current(req);
+    if (u?.role === 'candidate') {
+      const created = await remindSavedJobs(u.id);
+      if (created) await deliverSafely();
+    }
     const params = new URL(req.url).searchParams;
+    const savedView = params.get('saved') === '1';
+    if (savedView) for (const key of ['q','location','category','experience','type','salary','sort']) params.delete(key);
     const q = str(params.get('q'), 150),
       location = str(params.get('location'), 150),
       category = str(params.get('category'), 150),
@@ -121,8 +128,8 @@ export async function GET(req: Request) {
       type = str(params.get('type'), 100);
     const min = Number(params.get('salary') || 0);
     const page = Math.max(1, Math.min(100000, Number(params.get('page')) || 1));
-    const filters = ['j.status=?', 'j.deadline>=?', "c.status!='blocked'"];
-    const args: unknown[] = ['active', today()];
+    const filters = savedView ? ["j.status IN ('active','expired','closed')", "c.status!='blocked'"] : ['j.status=?', 'j.deadline>=?', "c.status!='blocked'"];
+    const args: unknown[] = savedView ? [] : ['active', today()];
     if (q) {
       filters.push('(j.title LIKE ? OR c.name LIKE ? OR j.tags LIKE ?)');
       args.push('%' + q + '%', '%' + q + '%', '%' + q + '%');

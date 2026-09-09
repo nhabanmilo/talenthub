@@ -729,6 +729,8 @@ export default function RecruitmentApp() {
             <span key={t}>{t}</span>
           ))}
           {j.is_demo === 1 && <span>Mẫu minh họa</span>}
+          {view === 'saved' && <span>Hạn nộp: {date(j.deadline)}</span>}
+          {view === 'saved' && j.status !== 'active' && <Badge status={j.status} />}
         </div>
       </div>
       <div className="job-right">
@@ -986,21 +988,13 @@ export default function RecruitmentApp() {
       )}
       {view === 'jobs' || view === 'saved' ? (
         <>
-          <section className="search-zone">
+          {view !== 'saved' && <section className="search-zone">
             <div className="container">
               <div className="career-hero">
               <div className="career-copy">
               <div className="eyebrow"><span className="hero-dot" /> CƠ HỘI MỚI, HÀNH TRÌNH MỚI</div>
               <h1>
-                {view === 'saved' ? (
-                  <>
-                    Những cơ hội <em>bạn đã lưu.</em>
-                  </>
-                ) : (
-                  <>
-                    Tìm công việc <em>đúng với bạn.</em>
-                  </>
-                )}
+                Tìm công việc <em>đúng với bạn.</em>
               </h1>
               <p>
                 Kết nối với doanh nghiệp phù hợp. Bắt đầu bước tiến tiếp theo.
@@ -1061,15 +1055,15 @@ export default function RecruitmentApp() {
                 ))}
               </div>
             </div>
-          </section>
-          <main className="container job-layout">
-            <aside
+          </section>}
+          <main className={'container job-layout' + (view === 'saved' ? ' saved-job-layout' : '')}>
+            {view !== 'saved' && <aside
               className={
                 'filter-panel ' + (mobileFilters ? 'show-filters' : '')
               }
             >
               {filters}
-            </aside>
+            </aside>}
             <section>
               <div className="results-heading">
                 <div>
@@ -1079,10 +1073,10 @@ export default function RecruitmentApp() {
                       : 'Việc làm dành cho bạn'}
                   </h2>
                   <p>
-                    <strong>{data.total}</strong> cơ hội đang chờ bạn khám phá
+                    <strong>{data.total}</strong> {view === 'saved' ? 'việc làm đã lưu' : 'cơ hội đang chờ bạn khám phá'}
                   </p>
                 </div>
-                <Pick
+                {view !== 'saved' && <Pick
                   value={sort}
                   onChange={setSort}
                   options={[
@@ -1090,15 +1084,15 @@ export default function RecruitmentApp() {
                     { value: 'salary', label: 'Lương cao nhất' },
                   ]}
                   label="Sắp xếp"
-                />
+                />}
               </div>
-              <button
+              {view !== 'saved' && <button
                 className="mobile-filter outline-button"
                 onClick={() => setMobileFilters(!mobileFilters)}
               >
                 <SlidersHorizontal size={16} /> Bộ lọc{' '}
                 {mobileFilters ? '−' : '+'}
-              </button>
+              </button>}
               <div className="job-list">
                 {loading ? (
                   <>
@@ -1109,7 +1103,7 @@ export default function RecruitmentApp() {
                 ) : data.jobs.length ? (
                   data.jobs.map(jobCard)
                 ) : (
-                  <Empty title="Chưa tìm thấy việc làm phù hợp">
+                  view === 'saved' ? <Empty title="Bạn chưa lưu việc làm nào"><p>Lưu các vị trí quan tâm để xem lại tại đây.</p><button className="primary" onClick={() => navigate('jobs')}>Khám phá việc làm</button></Empty> : <Empty title="Chưa tìm thấy việc làm phù hợp">
                     <p>Thử từ khóa khác hoặc điều chỉnh bộ lọc.</p>
                     <button className="outline-button" onClick={reset}>
                       Xóa bộ lọc
@@ -1149,7 +1143,7 @@ export default function RecruitmentApp() {
                 </Pagination>
               )}
             </section>
-            <aside className="right-rail">
+            {view !== 'saved' && <aside className="right-rail">
               <div className="profile-promo">
                 <div className="promo-icon">
                   <BriefcaseBusiness size={26} />
@@ -1187,7 +1181,7 @@ export default function RecruitmentApp() {
                 Các tin có nhãn “Mẫu minh họa” sử dụng doanh nghiệp giả lập phục
                 vụ đề án.
               </p>
-            </aside>
+            </aside>}
           </main>
         </>
       ) : (

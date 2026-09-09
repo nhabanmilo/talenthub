@@ -1,0 +1,17 @@
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new DatabaseSync(':memory:');
+for(const name of ['0000_open_edwin_jarvis','0001_spotty_greymalkin','0002_multi_industry_catalog']) db.exec(readFileSync('drizzle/'+name+'.sql','utf8'));
+db.exec("INSERT INTO users(id,email,password_hash,role,status,name,created_at) VALUES('reminder-test','candidate@demo.vn','disabled','candidate','active','Test','2026-09-09')");
+db.exec("INSERT INTO saved_jobs(candidate_id,job_id) VALUES('reminder-test','catalog-202609-job-01')");
+const sql=readFileSync('lib/saved-job-reminders.ts','utf8').match(/stmt\(`([\s\S]*?)`,/)[1];
+const run=()=>db.prepare(sql).run('2026-09-09T01:00:00Z','2026-09-09','2026-09-09','reminder-test','reminder-test');
+const deadline=d=>db.prepare("UPDATE jobs SET deadline=? WHERE id='catalog-202609-job-01'").run(d);
+deadline('2026-09-12');assert.equal(run().changes,0);
+deadline('2026-09-11');assert.equal(run().changes,1);assert.equal(run().changes,0);
+assert.equal(db.prepare('SELECT count(*) n FROM email_outbox').get().n,1);
+deadline('2026-09-08');assert.equal(run().changes,0);
+deadline('2026-09-10');assert.equal(run().changes,1);
+db.exec("DELETE FROM saved_jobs");deadline('2026-09-09');assert.equal(run().changes,0);
+console.log('PASS: two-day boundary, duplicate prevention, email queue trigger, changed deadline, expired and removed saves.');

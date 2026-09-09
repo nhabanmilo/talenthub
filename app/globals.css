@@ -1923,3 +1923,6 @@ input:not([type='checkbox']):not([type='file']), textarea { border-radius: 10px;
   .message-composer textarea { font-size: 16px !important; }
   .chat-footnote { padding: 0 12px 10px; font-size: 10px; }
 }
+
+.saved-job-layout { display: block; max-width: 1060px; margin-top: 30px; margin-bottom: 40px; }
+.saved-job-layout .results-heading { margin-bottom: 24px; }
