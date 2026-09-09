@@ -964,7 +964,9 @@ export default function RecruitmentApp() {
         <>
           <section className="search-zone">
             <div className="container">
-              <div className="eyebrow">● CƠ HỘI MỚI, HÀNH TRÌNH MỚI</div>
+              <div className="career-hero">
+              <div className="career-copy">
+              <div className="eyebrow"><span className="hero-dot" /> CƠ HỘI MỚI, HÀNH TRÌNH MỚI</div>
               <h1>
                 {view === 'saved' ? (
                   <>
@@ -979,6 +981,9 @@ export default function RecruitmentApp() {
               <p>
                 Kết nối với doanh nghiệp phù hợp. Bắt đầu bước tiến tiếp theo.
               </p>
+              </div>
+              <img className="career-art" src="/career-illustration.svg" alt="Minh họa không gian làm việc với cây xanh và những cơ hội nghề nghiệp mới" width="560" height="350" />
+              </div>
               <form
                 className="searchbar"
                 onSubmit={(e) => {

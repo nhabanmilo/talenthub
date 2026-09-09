@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
@@ -19,7 +20,7 @@
   --color-card: #fff;
   --color-card-foreground: #182b29;
   --radius-lg: 12px;
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
 }
 :root,
 .dark {
@@ -36,7 +37,7 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
   font-size: 16px;
   line-height: 1.5;
 }
@@ -1817,3 +1818,55 @@ footer .text-button {
 .avatar-upload { position: relative; overflow: hidden; cursor: pointer; }
 .avatar-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .avatar-upload:focus-within { outline: 2px solid #187955; outline-offset: 3px; }
+
+/* TalentHub visual system — warm neutrals, teal accents, Vietnamese typography. */
+:root, .dark { --background: #f6f7f4; --foreground: #203d3a; --primary: #146c62; --radius: 16px; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; line-height: 1.65; }
+h1, h2, h3, h4 { text-wrap: balance; }
+.topbar { background: #fffefa; border-bottom-color: #e4e9e2; }
+.brand { letter-spacing: -1.4px; font-weight: 800; }
+.brand-icon { background: #146c62; border-radius: 12px; box-shadow: 0 5px 12px #146c621c; }
+.topbar nav a.active { color: #146c62; border-color: #146c62; }
+.header-actions .logout-button { color: #47615a; border: 1px solid #dce6de; border-radius: 10px; padding: 8px 12px; }
+.primary { background: #146c62; border-radius: 10px; font-weight: 600; box-shadow: 0 4px 10px #146c6214; }
+.primary:hover { background: #0c514a; box-shadow: 0 6px 16px #146c6225; }
+.search-zone { background: #edf3e9; background-image: radial-gradient(ellipse at 90% 15%, #faefd9 0, transparent 55%); padding: 12px 0 28px; border-bottom: 1px solid #dce7da; }
+.career-hero { display: grid; grid-template-columns: 1.4fr 1fr; align-items: center; gap: 28px; min-height: 240px; }
+.career-copy { padding: 20px 0; }
+.career-art { width: 100%; max-width: 425px; height: 252px; object-fit: contain; justify-self: end; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.7px; color: #487b65; }
+.hero-dot { width: 7px; height: 7px; background: #268472; border-radius: 50%; box-shadow: 0 0 0 5px #26847212; margin-right: 3px; }
+.search-zone h1 { font-size: clamp(30px, 3.2vw, 46px); line-height: 1.35; letter-spacing: -1.6px; font-weight: 800; max-width: 700px; margin-top: 14px; }
+.search-zone h1 em { color: #167768; }
+.search-zone p { color: #526e62; line-height: 1.8; margin-top: 14px; max-width: 550px; }
+.searchbar { margin-top: 2px; border: 1px solid #d9e3d7; border-radius: 16px; padding: 10px 12px 10px 22px; box-shadow: 0 10px 28px #254c3510; }
+.trending { flex-wrap: wrap; color: #56705e; }
+.trending button { border-radius: 20px; background: #fffdf7b3; padding: 4px 13px; border-color: #d5e1d1; }
+.trending button:hover { background: #fffefa; border-color: #8fbaa1; }
+.job-card, .panel, .filter-panel, .table-panel { border-color: #e0e7df; border-radius: 16px; box-shadow: 0 3px 14px #28443805; }
+.job-card { background: #fffefa; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.job-card:hover { border-color: #9fc6b3; box-shadow: 0 9px 26px #254c3510; transform: translateY(-2px); }
+.job-card h3 { line-height: 1.55; letter-spacing: -.35px; }
+.company-logo { border-radius: 14px; }
+.results-heading h2 { font-weight: 700; letter-spacing: -.5px; }
+.filter-panel { background: #fffefa; }
+.profile-promo { background: #184f49; background-image: radial-gradient(circle at 100% 0, #367d64 0, transparent 70%); border-radius: 18px; box-shadow: 0 8px 24px #164d4815; }
+.profile-promo h2 { line-height: 1.5; letter-spacing: -.5px; }
+.outline-button { border-radius: 10px; }
+.workspace-nav { background: #fffefa; }
+.panel-heading h1, .page-heading h1 { letter-spacing: -.8px; }
+.account-avatar { background: #e1efe6; color: #146c62; box-shadow: 0 0 0 3px #f3f7ef; }
+.account-avatar-large { box-shadow: 0 0 0 6px #edf4e9; margin: 6px; }
+input:not([type='checkbox']):not([type='file']), textarea { border-radius: 10px; }
+@media (max-width: 1050px) { .career-hero { grid-template-columns: 1.5fr 1fr; gap: 12px; } .career-art { height: 220px; } }
+@media (max-width: 760px) {
+  .career-hero { grid-template-columns: 1fr; gap: 0; min-height: 0; }
+  .career-copy { padding: 24px 0 14px; }
+  .career-art { height: 170px; max-width: 310px; justify-self: center; }
+  .search-zone h1 { font-size: 32px; letter-spacing: -.9px; }
+  .search-zone p { font-size: 14px; }
+  .searchbar { margin-top: 12px; padding: 12px; }
+  .eyebrow { letter-spacing: 1px; font-size: 10px; }
+  .job-card:hover { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .job-card { transition: none; } .job-card:hover { transform: none; } }
