@@ -15,6 +15,13 @@
       "when": 1788919408249,
       "tag": "0001_spotty_greymalkin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788928795739,
+      "tag": "0002_multi_industry_catalog",
+      "breakpoints": true
     }
   ]
 }
