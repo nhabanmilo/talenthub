@@ -276,6 +276,23 @@ export default function RecruitmentApp() {
     [selected, setSelected] = useState<any>(null),
     [confirm, setConfirm] = useState<any>(null),
     [upload, setUpload] = useState<File | null>(null);
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    setSearchSuggestions([]);
+    if (q.trim().length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch('/api/data?q=' + encodeURIComponent(q.trim()), { signal: controller.signal });
+        if (!res.ok) return;
+        const result: any = await res.json();
+        if (!controller.signal.aborted) {
+          setSearchSuggestions([...new Set<string>((result.jobs || []).map((job: any) => job.title))]);
+        }
+      } catch { /* Typing and searching remain available when suggestions cannot load. */ }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [q]);
   const [communicationTarget, setCommunicationTarget] = useState<{
     applicationId: string;
     create?: boolean;
@@ -1002,10 +1019,15 @@ export default function RecruitmentApp() {
                 <Search size={22} />
                 <input
                   aria-label="Từ khóa tìm việc"
+                  list="job-title-suggestions"
+                  autoComplete="off"
                   placeholder="Vị trí tuyển dụng, kỹ năng hoặc công ty"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
+                <datalist id="job-title-suggestions">
+                  {searchSuggestions.map(title => <option key={title} value={title} />)}
+                </datalist>
                 <div className="location">
                   <MapPin size={19} />
                   <Pick
