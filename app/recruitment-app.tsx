@@ -859,7 +859,7 @@ export default function RecruitmentApp() {
         >
           <span className="brand-icon">t↗</span>talent<span>hub</span>
         </a>
-        <nav aria-label="Điều hướng chính">
+        {u?.role !== 'candidate' && <nav aria-label="Điều hướng chính">
           {u?.role === 'employer' || u?.role === 'admin' ? (
             <>
               <a
@@ -897,7 +897,7 @@ export default function RecruitmentApp() {
               </a>
             ))
           )}
-        </nav>
+        </nav>}
         <div className="header-actions">
           {u ? (
             <>
