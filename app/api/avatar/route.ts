@@ -1,11 +1,17 @@
-import { requireUser, csrf, files, check, error, response } from '@/lib/server';
+import { requireUser, csrf, files, check, error, response, one } from '@/lib/server';
+import { safeGooglePicture } from '@/lib/google';
 export const dynamic = 'force-dynamic';
 const key = (id: string) => `avatars/${id}/profile`;
 export async function GET(req: Request) {
   try {
     const u = await requireUser(req);
     const image = await files().get(key(u.id));
-    if (!image) return new Response(null, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+    if (!image) {
+      const identity = await one('SELECT picture FROM google_identities WHERE user_id=?',u.id);
+      const picture = safeGooglePicture(identity?.picture);
+      if(picture) return new Response(null,{status:302,headers:{Location:picture,'Cache-Control':'private, no-store'}});
+      return new Response(null, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+    }
     return new Response(image.body, { headers: {
       'Content-Type': image.httpMetadata?.contentType || 'application/octet-stream',
       'Cache-Control': 'private, no-store',

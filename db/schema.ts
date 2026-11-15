@@ -6,6 +6,10 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/sqlite-core';
+export const passwordResets = sqliteTable('password_resets', {
+  token_hash: text().primaryKey(), user_id: text().notNull(), expires_at: integer().notNull(),
+  used_at: text(), created_at: text().notNull(),
+}, t => [index('idx_password_reset_user').on(t.user_id,t.expires_at)]);
 export const users = sqliteTable('users', {
   id: text().primaryKey(),
   email: text().notNull().unique(),
@@ -21,6 +25,33 @@ export const sessions = sqliteTable('sessions', {
     .notNull()
     .references(() => users.id),
   expires_at: integer().notNull(),
+});
+export const googleIdentities = sqliteTable('google_identities', {
+  subject: text().primaryKey(),
+  user_id: text().notNull().unique().references(() => users.id),
+  picture: text().notNull().default(''),
+});
+export const oauthStates = sqliteTable('oauth_states', {
+  state_hash: text().primaryKey(),
+  verifier: text().notNull(),
+  user_id: text(),
+  role: text().notNull(),
+  expires_at: integer().notNull(),
+});
+export const careerDocuments = sqliteTable('career_documents', {
+  id: text().primaryKey(),
+  user_id: text().notNull().references(() => users.id),
+  title: text().notNull(),
+  content: text().notNull(),
+  updated_at: text().notNull(),
+}, t => [index('idx_career_documents_user').on(t.user_id)]);
+export const careerPreferences = sqliteTable('career_preferences', {
+  user_id: text().primaryKey().references(() => users.id),
+  category: text().notNull().default(''),
+  location: text().notNull().default(''),
+  salary_min: real().notNull().default(0),
+  experience: text().notNull().default(''),
+  skills: text().notNull().default(''),
 });
 export const profiles = sqliteTable('profiles', {
   user_id: text()

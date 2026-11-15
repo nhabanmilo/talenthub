@@ -1,6 +1,9 @@
 import { inferSpecialty, occupationSelection, specialties } from '@/lib/occupations';
+import { env } from 'cloudflare:workers';
+import { googleReady } from '@/lib/google';
 import { categoryFilterNames } from '@/lib/category-groups';
 import { remindSavedJobs } from '@/lib/saved-job-reminders';
+import { canCloseJob, canModerateJob } from '@/lib/recruitment-workflow';
 import { normalizeLocation, locationAliases } from '@/lib/locations';
 import { deliverSafely } from '@/lib/mail';
 import {
@@ -26,79 +29,12 @@ import { sampleJobs, categories as seedCategories } from '@/app/seed';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 export const dynamic = 'force-dynamic';
 async function seedCatalog() {
-  if (await one("SELECT id FROM setup WHERE id='demo_seeded'")) return;
-  const ops = [
-    stmt('INSERT INTO setup(id,value) VALUES(?,?)', 'demo_seeded', now()),
-  ];
-  const names = [...new Set(sampleJobs.map((j) => j.company_name))];
-  for (const [nameIdx, name] of names.entries()) {
-    const uid = 'demo-employer-' + nameIdx,
-      cid = 'demo-company-' + nameIdx;
-    ops.push(
-      stmt(
-        'INSERT INTO users(id,email,password_hash,role,status,name,created_at) VALUES(?,?,?,?,?,?,?)',
-        uid,
-        uid + '@example.invalid',
-        'disabled',
-        'employer',
-        'locked',
-        name,
-        now(),
-      ),
-      stmt('INSERT INTO profiles(user_id) VALUES(?)', uid),
-      stmt(
-        'INSERT INTO companies(id,owner_id,name,address,description,status,is_demo) VALUES(?,?,?,?,?,?,1)',
-        cid,
-        uid,
-        name,
-        'Việt Nam',
-        'Doanh nghiệp giả lập phục vụ minh họa nghiệp vụ tuyển dụng.',
-        'verified',
-      ),
-    );
-  }
-  for (const [nameIdx, name] of seedCategories.entries())
-    ops.push(
-      stmt(
-        'INSERT OR IGNORE INTO categories(id,name,is_active) VALUES(?,?,1)',
-        'category-' + nameIdx,
-        name,
-      ),
-    );
-  for (const j of sampleJobs) {
-    const i = names.indexOf(j.company_name);
-    ops.push(
-      stmt(
-        'INSERT INTO jobs(id,company_id,created_by,category,title,description,requirements,benefits,location,salary_min,salary_max,deadline,status,experience,type,tags,created_at,updated_at,is_demo,specialty) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
-        j.id,
-        'demo-company-' + i,
-        'demo-employer-' + i,
-        j.category,
-        j.title,
-        j.description,
-        j.requirements,
-        j.benefits,
-        j.location,
-        j.salary_min,
-        j.salary_max,
-        new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-        'active',
-        j.experience,
-        j.type,
-        JSON.stringify(j.tags),
-        now(),
-        now(),
-        inferSpecialty(j.category, j.title),
-      ),
-    );
-  }
-  try {
-    await db().batch(ops);
-  } catch (e) {
-    if (!(await one("SELECT id FROM setup WHERE id='demo_seeded'"))) throw e;
-  }
+  if (await one("SELECT id FROM setup WHERE id='categories_initialized'")) return;
+  await db().batch([
+    ...seedCategories.map((name, index) => stmt('INSERT OR IGNORE INTO categories(id,name,is_active) VALUES(?,?,1)', 'category-' + index, name)),
+    stmt("INSERT OR IGNORE INTO setup(id,value) VALUES('categories_initialized',?)", now()),
+  ]);
 }
-
 const jobSelect =
   'SELECT j.*,c.name company_name,c.description company_description,c.address company_address,c.website company_website,c.status company_status FROM jobs j JOIN companies c ON c.id=j.company_id';
 function decorate(j: any) {
@@ -122,6 +58,8 @@ export async function GET(req: Request) {
       if (created) await deliverSafely();
     }
     const params = new URL(req.url).searchParams;
+    const demoEnabled = (env as unknown as Record<string,string>).ENABLE_DEMO_DATA === 'true';
+    if (!demoEnabled) params.delete('demo');
     const savedView = params.get('saved') === '1';
     if (savedView) for (const key of ['q','location','category','experience','type','salary','sort','company']) params.delete(key);
     const q = str(params.get('q'), 150),
@@ -130,9 +68,10 @@ export async function GET(req: Request) {
       experience = str(params.get('experience'), 100),
       type = str(params.get('type'), 100);
     const min = Number(params.get('salary') || 0);
-    const page = Math.max(1, Math.min(100000, Number(params.get('page')) || 1));
+    let page = Math.max(1, Math.min(100000, Math.floor(Number(params.get('page')) || 1)));
     const filters = savedView ? ["j.status IN ('active','expired','closed')", "c.status!='blocked'"] : ['j.status=?', 'j.deadline>=?', "c.status!='blocked'"];
     const args: unknown[] = savedView ? [] : ['active', today()];
+    if (!savedView) { filters.push('j.is_demo=?', "c.status='verified'"); args.push(params.get('demo') === '1' ? 1 : 0); }
     if (params.get('company')) { filters.push('j.company_id=?'); args.push(str(params.get('company'),100)); }
     if (q) {
       filters.push('(j.title LIKE ? OR c.name LIKE ? OR j.tags LIKE ?)');
@@ -168,11 +107,11 @@ export async function GET(req: Request) {
       args.push(min);
     }
     if (params.get('saved') === '1') {
-      if (!u) return response({ error: 'Vui lòng đăng nhập.' }, 401);
+      if (!u || u.role !== 'candidate') filters.push('1=0');
       filters.push(
         'j.id IN (SELECT job_id FROM saved_jobs WHERE candidate_id=?)',
       );
-      args.push(u.id);
+      args.push(u?.id || '');
     }
     const where = ' WHERE ' + filters.join(' AND ');
     const total = await one(
@@ -184,6 +123,7 @@ export async function GET(req: Request) {
       params.get('sort') === 'salary'
         ? 'j.salary_max DESC,j.created_at DESC'
         : 'j.created_at DESC,j.id';
+    page = Math.min(page, Math.max(1, Math.ceil(Number(total.total) / 6)));
     const jobs = (
       await all(
         jobSelect + where + ` ORDER BY ${order} LIMIT 6 OFFSET ?`,
@@ -196,17 +136,20 @@ export async function GET(req: Request) {
       const j = await one(jobSelect + ' WHERE j.id=?', params.get('job'));
       if (
         j &&
-        ((j.status === 'active' && j.company_status !== 'blocked') ||
+        ((j.status === 'active' && j.company_status === 'verified') ||
           u?.role === 'admin' ||
           j.created_by === u?.id)
       )
         detail = decorate(j);
     }
     if (detail) {
-      detail.related = (await all(jobSelect + " WHERE j.id!=? AND j.category=? AND j.status='active' AND j.deadline>=? AND c.status!='blocked' ORDER BY (j.specialty=? AND j.specialty!='') DESC,j.created_at DESC LIMIT 4", detail.id,detail.category,today(),detail.specialty)).map(decorate);
+      detail.related = (await all(jobSelect + " WHERE j.id!=? AND j.is_demo=? AND j.category=? AND j.status='active' AND j.deadline>=? AND c.status='verified' ORDER BY (j.specialty=? AND j.specialty!='') DESC,j.created_at DESC LIMIT 4", detail.id,detail.is_demo,detail.category,today(),detail.specialty)).map(decorate);
     }
     const data: any = {
       user: u,
+      demoEnabled,
+      googleReady: googleReady(),
+      googleLinked: u ? !!(await one('SELECT subject FROM google_identities WHERE user_id=?',u.id)) : false,
       jobs,
       total: total.total,
       page,
@@ -215,7 +158,7 @@ export async function GET(req: Request) {
         'SELECT * FROM categories WHERE is_active=1 ORDER BY name',
       ),
       companies: await all(
-        "SELECT c.id,c.name,c.description,c.address,c.website,c.status,c.is_demo,(SELECT count(*) FROM jobs j WHERE j.company_id=c.id AND j.status='active' AND j.deadline>=?) active_jobs FROM companies c WHERE c.status!='blocked' ORDER BY c.name", today(),
+        "SELECT c.id,c.name,c.description,c.address,c.website,c.status,c.is_demo,(SELECT count(*) FROM jobs j WHERE j.company_id=c.id AND j.status='active' AND j.deadline>=?) active_jobs FROM companies c WHERE c.status='verified' AND c.is_demo=? ORDER BY c.name", today(),params.get('demo') === '1' ? 1 : 0,
       ),
       followedCompanies: [],
       saved: [],
@@ -317,6 +260,11 @@ async function mutate(req: Request) {
       else await stmt('DELETE FROM company_follows WHERE candidate_id=? AND company_id=?',u.id,ref).run();
       return response({ok:true});
     }
+    if (action === 'account-name') {
+      const name = required(b.name, 'họ tên', 150);
+      await stmt('UPDATE users SET name=? WHERE id=?', name, u.id).run();
+      return response({ ok: true });
+    }
     if (action === 'profile') {
       const name = required(b.name, 'họ tên', 150);
       await db().batch([
@@ -347,35 +295,36 @@ async function mutate(req: Request) {
         u.id,
       );
       check(existing?.status !== 'blocked', 'Doanh nghiệp đã bị khóa.', 403);
+      const address = required(b.address, 'địa chỉ', 255);
+      const taxCode = str(b.tax_code, 50);
+      const identityUnchanged = existing && existing.name === name && (existing.tax_code || '') === taxCode && existing.address === address;
       await stmt(
         'INSERT INTO companies(id,owner_id,name,tax_code,address,website,description) VALUES(?,?,?,?,?,?,?) ON CONFLICT(owner_id) DO UPDATE SET name=excluded.name,tax_code=excluded.tax_code,address=excluded.address,website=excluded.website,description=excluded.description,status=?',
         existing?.id || id(),
         u.id,
         name,
-        str(b.tax_code, 50),
-        required(b.address, 'địa chỉ', 255),
+        taxCode,
+        address,
         website,
         required(b.description, 'giới thiệu doanh nghiệp', 5000),
-        'pending',
+        existing?.status === 'verified' && identityUnchanged ? 'verified' : 'pending',
       ).run();
       return response({ ok: true });
     }
     if (action === 'save') {
       role('candidate');
+      check(typeof b.saved === 'boolean', 'Trạng thái lưu không hợp lệ.');
+      if (b.saved === false) {
+        await stmt('DELETE FROM saved_jobs WHERE candidate_id=? AND job_id=?', u.id, ref).run();
+        return response({ ok: true });
+      }
       const j = await one(
-        "SELECT j.id FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status!='blocked'",
+        "SELECT j.id FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status='verified'",
         ref,
         today(),
       );
       check(j, 'Tin không còn nhận hồ sơ.', 409);
-      if (b.saved === false)
-        await stmt(
-          'DELETE FROM saved_jobs WHERE candidate_id=? AND job_id=?',
-          u.id,
-          ref,
-        ).run();
-      else
-        await stmt(
+      await stmt(
           'INSERT OR IGNORE INTO saved_jobs(candidate_id,job_id) VALUES(?,?)',
           u.id,
           ref,
@@ -385,7 +334,7 @@ async function mutate(req: Request) {
     if (action === 'apply') {
       role('candidate');
       const j = await one(
-        "SELECT j.* FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status!='blocked'",
+        "SELECT j.* FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status='verified'",
         ref,
         today(),
       );
@@ -408,7 +357,7 @@ async function mutate(req: Request) {
       const appId = id();
       await db().batch([
         stmt(
-          "INSERT INTO applications(id,job_id,candidate_id,resume_id,cover_letter,applied_at,updated_at) SELECT ?,j.id,?,?,?,?,? FROM jobs j JOIN companies c ON c.id=j.company_id JOIN resumes r ON r.id=? AND r.candidate_id=? AND r.deleted=0 WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status!='blocked'",
+          "INSERT INTO applications(id,job_id,candidate_id,resume_id,cover_letter,applied_at,updated_at) SELECT ?,j.id,?,?,?,?,? FROM jobs j JOIN companies c ON c.id=j.company_id JOIN resumes r ON r.id=? AND r.candidate_id=? AND r.deleted=0 WHERE j.id=? AND j.status='active' AND j.deadline>=? AND c.status='verified'",
           appId,
           u.id,
           r.id,
@@ -575,13 +524,15 @@ async function mutate(req: Request) {
     }
     if (action === 'job-close') {
       role('employer');
+      const closingJob = await one('SELECT status FROM jobs WHERE id=? AND created_by=?', ref, u.id);
       check(
-        await one('SELECT id FROM jobs WHERE id=? AND created_by=?', ref, u.id),
+        closingJob,
         'Bạn không có quyền đóng tin này.',
         403,
       );
+      check(canCloseJob(closingJob.status), 'Chỉ tin đang tuyển hoặc chờ duyệt mới có thể đóng.', 409);
       await stmt(
-        "UPDATE jobs SET status='closed',updated_at=? WHERE id=? AND created_by=?",
+        "UPDATE jobs SET status='closed',updated_at=? WHERE id=? AND created_by=? AND status IN ('active','pending')",
         now(),
         ref,
         u.id,
@@ -597,11 +548,12 @@ async function mutate(req: Request) {
         'Trạng thái không hợp lệ.',
       );
       const a = await one(
-        'SELECT a.*,j.title FROM applications a JOIN jobs j ON j.id=a.job_id WHERE a.id=? AND j.created_by=?',
+        'SELECT a.*,j.title,c.status company_status FROM applications a JOIN jobs j ON j.id=a.job_id JOIN companies c ON c.id=j.company_id WHERE a.id=? AND j.created_by=?',
         ref,
         u.id,
       );
       check(a, 'Bạn không có quyền xem hồ sơ này.', 403);
+      check(a.company_status !== 'blocked', 'Doanh nghiệp đang bị khóa, không thể cập nhật hồ sơ ứng tuyển.', 403);
       const labels: any = {
         viewed: 'Đã xem',
         shortlisted: 'Phù hợp',
@@ -617,7 +569,7 @@ async function mutate(req: Request) {
           now(),
           ref,
         ),
-        notice(a.candidate_id, `Hồ sơ ${a.title}: ${labels[b.status]}.`),
+        ...(a.status !== b.status ? [notice(a.candidate_id, `Hồ sơ ${a.title}: ${labels[b.status]}.`)] : []),
       ]);
       return response({ ok: true });
     }
@@ -636,6 +588,7 @@ async function mutate(req: Request) {
       );
       const j = await one('SELECT * FROM jobs WHERE id=?', ref);
       check(j, 'Không tìm thấy tin.', 404);
+      check(canModerateJob(j.status, b.status), 'Thao tác không phù hợp với trạng thái hiện tại của tin. Hãy tải lại danh sách.', 409);
       const reason = ['rejected', 'hidden'].includes(b.status)
         ? required(b.reason, 'lý do', 2000)
         : '';
@@ -650,7 +603,7 @@ async function mutate(req: Request) {
           'SELECT status FROM companies WHERE id=?',
           j.company_id,
         );
-        check(c?.status !== 'blocked', 'Doanh nghiệp đang bị khóa.', 409);
+        check(c?.status === 'verified', 'Hãy xác minh doanh nghiệp trước khi duyệt tin.', 409);
       }
       await db().batch([
         stmt(
@@ -681,6 +634,7 @@ async function mutate(req: Request) {
         'Không thể thay đổi tài khoản quản trị.',
         403,
       );
+      if (target.status === b.status) return response({ ok: true });
       await db().batch([
         stmt('UPDATE users SET status=? WHERE id=?', b.status, ref),
         ...(b.status === 'locked'
@@ -698,6 +652,7 @@ async function mutate(req: Request) {
       );
       const c = await one('SELECT * FROM companies WHERE id=?', ref);
       check(c, 'Không tìm thấy doanh nghiệp.', 404);
+      if (c.status === b.status) return response({ ok: true });
       const reason =
         b.status === 'blocked' ? required(b.reason, 'lý do khóa', 2000) : '';
       await db().batch([
@@ -716,6 +671,7 @@ async function mutate(req: Request) {
       if (ref) {
         const old = await one('SELECT * FROM categories WHERE id=?', ref);
         check(old, 'Không tìm thấy danh mục.', 404);
+        check(name === old.name || !specialties.some(s => s.category === old.name), 'Nhóm nghề chuẩn có chuyên môn liên kết nên không thể đổi tên. Bạn có thể ẩn nhóm này hoặc tạo nhóm mới.');
         await db().batch([
           stmt(
             'UPDATE categories SET name=?,is_active=? WHERE id=?',
@@ -729,9 +685,10 @@ async function mutate(req: Request) {
       } else
         await db().batch([
           stmt(
-            'INSERT INTO categories(id,name,is_active) VALUES(?,?,1)',
+            'INSERT INTO categories(id,name,is_active) VALUES(?,?,?)',
             id(),
             name,
+            b.is_active ? 1 : 0,
           ),
           auditStmt(u, 'category:create', name),
         ]);
@@ -739,6 +696,7 @@ async function mutate(req: Request) {
     }
     if (action === 'seed') {
       role('admin');
+      check((env as unknown as Record<string,string>).ENABLE_DEMO_DATA === 'true', 'Dữ liệu minh họa không được bật trên website này.', 403);
       check(
         !(await one("SELECT id FROM setup WHERE id='demo_seeded'")),
         'Dữ liệu mẫu đã được tạo.',

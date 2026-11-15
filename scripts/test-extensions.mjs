@@ -7,7 +7,7 @@ let checks=0;
 async function call(path,body,cookie='',extra={}){const res=await fetch(base+path,{method:body?'POST':'GET',headers:{...(body instanceof FormData?{}:body?{'Content-Type':'application/json'}:{}),Origin:base,...(cookie?{Cookie:cookie}:{}),...extra},body:body?(body instanceof FormData?body:JSON.stringify(body)):undefined});let data;try{data=await res.clone().json()}catch{data=await res.text()}return {res,data,cookie:res.headers.get('set-cookie')?.split(';')[0]||cookie}}
 function expect(r,status,label){assert.equal(r.res.status,status,label+': '+JSON.stringify(r.data));checks++;return r}
 async function register(role,extra=""){return expect(await call('/api/auth',{action:'register',role,name:role+' test',email:role+extra+suffix+'@example.test',password}),200,'Register '+role)}
-let r=expect(await call('/api/data'),200,'Public catalog');assert.equal(r.data.total>=8,true);checks++;
+let r=expect(await call('/api/data?demo=1'),200,'Demo catalog');assert.equal(r.data.total>=8,true);checks++;
 expect(await call('/api/auth',{action:'register',role:'admin',name:'attacker',email:'bad'+suffix+'@example.test',password}),400,'Cannot self-register admin');
 let admin=await call('/api/auth',{action:'setup',name:'Test admin',email:'admin'+suffix+'@example.test',password},'',{'oai-authenticated-user-id':'local-test-owner','oai-authenticated-user-email':'local-owner@example.test'});
 if(admin.res.status===403){expect(admin,403,'Forged platform headers denied');admin=expect(await call('/api/auth',{action:'register',role:'candidate',name:'Test Admin',email:'admin'+suffix+'@example.test',password}),200,'Create local admin fixture');execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','execute','DB','--local','--config','wrangler.local.json','--persist-to','.wrangler/state','--command',"UPDATE users SET role='admin' WHERE id='"+admin.data.user.id+"'"],{env:{...process.env,WRANGLER_LOG_PATH:'.wrangler/logs',WRANGLER_SEND_METRICS:'false'},stdio:'pipe'});admin=expect(await call('/api/auth',{action:'login',email:'admin'+suffix+'@example.test',password}),200,'Admin fixture login')}else expect(admin,200,'Setup admin');
@@ -26,6 +26,8 @@ r=expect(await call('/api/data',job,e.cookie),200,'Create pending job');const ji
 r=expect(await call('/api/data?q='+suffix),200,'Search pending');assert.equal(r.data.total,0);checks++;
 expect(await call('/api/data',{action:'apply',id:jid,resume_id:'missing'},c.cookie),409,'Pending job blocks application');
 expect(await call('/api/data',{...job,id:jid},other.cookie),403,'Other employer cannot edit');
+const company=(await call('/api/data',null,e.cookie)).data.company;
+expect(await call('/api/data',{action:'company-status',id:company.id,status:'verified'},admin.cookie),200,'Verify company');
 expect(await call('/api/data',{action:'moderate',id:jid,status:'active'},admin.cookie),200,'Approve job');
 r=expect(await call('/api/data?q='+suffix),200,'Approved searchable');assert.equal(r.data.total,1);checks++;
 expect(await call('/api/data',{action:'apply',id:jid,resume_id:'missing'},c.cookie),400,'Valid CV required');

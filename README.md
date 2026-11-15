@@ -126,3 +126,7 @@ Bộ test mail chỉ dùng fetch mô phỏng và không gửi email thật. Bộ
 - Kiểm tra khi ứng viên tải dữ liệu website. POST /api/email/dispatch cũng kiểm tra toàn bộ tin đã lưu trước khi xử lý hàng đợi.
 - Muốn chạy khi người dùng không mở web, cần cấu hình lịch gọi endpoint hằng ngày (khuyến nghị 08:00 Asia/Ho_Chi_Minh), kèm Bearer MAIL_CRON_SECRET và quyền truy cập Site riêng tư. Lịch nền chưa được cấp trên bản triển khai này. Email thật cần RESEND_API_KEY và EMAIL_FROM đã xác minh.
 - Kiểm tra: node scripts/test-saved-reminders.mjs.
+
+## Bản cập nhật công cụ ứng viên và tin thật
+
+Xem [SETUP-PRODUCTION.md](./SETUP-PRODUCTION.md) để kích hoạt Google/Resend, quy trình nhà tuyển dụng tự đăng và quản trị duyệt, sử dụng trình tạo CV, gợi ý và tính lương. Bản cập nhật hiện đã kiểm tra local, chưa triển khai vì dịch vụ Sites trả lỗi không tìm thấy dự án.

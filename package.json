@@ -15,7 +15,9 @@
     "db:local": "node scripts/db-local.mjs",
     "test:api": "node scripts/test-api.mjs",
     "test:extensions": "node scripts/test-extensions.mjs",
-    "test:mail": "node scripts/test-mail.mjs"
+    "test:mail": "node scripts/test-mail.mjs",
+    "test:career": "node scripts/test-career.mjs",
+    "test:google": "node scripts/test-google.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

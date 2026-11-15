@@ -132,7 +132,7 @@ export default function CommunicationPanel({
       onChanged={onChanged}
     />
   ) : (
-    <Email user={user} />
+    <Email user={user} personal={view === 'email-settings'} />
   );
 }
 function Chat({
@@ -172,8 +172,10 @@ function Chat({
   }
   useEffect(() => {
     let alive = true;
+    let polling = false;
     const poll = async () => {
-      if (document.hidden) return;
+      if (document.hidden || polling) return;
+      polling = true;
       try {
         const d = await request('/api/chat');
         if (!alive) return;
@@ -188,6 +190,8 @@ function Chat({
           setFailure((e as Error).message);
           setLoading(false);
         }
+      } finally {
+        polling = false;
       }
     };
     void poll();
@@ -208,8 +212,10 @@ function Chat({
     if (!active) return;
     let alive = true;
     let first = true;
+    let polling = false;
     const poll = async () => {
-      if (document.hidden) return;
+      if (document.hidden || polling) return;
+      polling = true;
       try {
         const d = await request(
           '/api/chat?application=' + encodeURIComponent(active),
@@ -239,6 +245,8 @@ function Chat({
           });
       } catch (e) {
         if (alive) setFailure((e as Error).message);
+      } finally {
+        polling = false;
       }
     };
     void poll();
@@ -994,7 +1002,7 @@ function Interviews({
     </>
   );
 }
-function Email({ user }: { user: any }) {
+function Email({ user, personal = false }: { user: any; personal?: boolean }) {
   const [data, setData] = useState<any>({
       rows: [],
       configured: false,
@@ -1047,8 +1055,8 @@ function Email({ user }: { user: any }) {
     <>
       <div className="page-heading">
         <div className="eyebrow">CẬP NHẬT QUA HỘP THƯ</div>
-        <h1>Email thông báo</h1>
-        <p>Nhận thông báo về tuyển dụng, tin nhắn mới và lịch phỏng vấn.</p>
+        <h1>{personal ? 'Cài đặt nhận email' : 'Email thông báo'}</h1>
+        <p>Nhận thông báo về tuyển dụng, trạng thái hồ sơ và tin nhắn mới.</p>
       </div>
       {error && (
         <div className="feedback error" role="alert">
@@ -1085,7 +1093,7 @@ function Email({ user }: { user: any }) {
           {!data.configured &&
             ' Email chưa được gửi ra ngoài. Các sự kiện mới được lưu trong hàng đợi.'}
         </p>
-        {user.role === 'admin' && !data.configured && (
+        {!personal && user.role === 'admin' && !data.configured && (
           <div className="mail-setup">
             <h3>Cấu hình gửi email</h3>
             <ol>
@@ -1107,7 +1115,7 @@ function Email({ user }: { user: any }) {
             </p>
           </div>
         )}
-        {user.role === 'admin' && (
+        {!personal && user.role === 'admin' && (
           <div className="interview-actions">
             <button
               className="primary"
@@ -1126,7 +1134,7 @@ function Email({ user }: { user: any }) {
           </div>
         )}
       </section>
-      <section className="panel table-panel mail-log">
+      {!personal && <section className="panel table-panel mail-log">
         <div className="panel-heading">
           <h2>Lịch sử gửi email</h2>
           <p className="muted">
@@ -1173,7 +1181,7 @@ function Email({ user }: { user: any }) {
                     <p className="muted">
                       {r.last_error || (r.attempts || 0) + ' lần thử'}
                     </p>
-                    {user.role === 'admin' && r.status === 'failed' && (
+                    {!personal && user.role === 'admin' && r.status === 'failed' && (
                       <button
                         className="text-button"
                         disabled={busy || !data.configured}
@@ -1192,7 +1200,7 @@ function Email({ user }: { user: any }) {
             Chưa có email được tạo từ khi bật chức năng thông báo email.
           </Empty>
         )}
-      </section>
+      </section>}
     </>
   );
 }

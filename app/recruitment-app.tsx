@@ -4,12 +4,16 @@ import ProfileChecklist from './profile-checklist';
 import OccupationPicker from './occupation-picker';
 import { specialties } from '@/lib/occupations';
 import UserAvatar from './user-avatar';
+import CareerPanel from './career-panel';
 import CommunicationPanel from './communication-panel';
+import PasswordRecovery from './password-recovery';
+import { canCloseJob, canModerateJob } from '@/lib/recruitment-workflow';
 import {
   useState,
   useEffect,
   useCallback,
   useRef,
+  useId,
   FormEvent,
   ReactNode,
 } from 'react';
@@ -38,6 +42,8 @@ import {
   Clock,
   FolderCheck,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   Select,
@@ -186,6 +192,25 @@ function Field({
   wide?: boolean;
   children?: ReactNode;
 }) {
+  const passwordId = useId();
+  const [showPassword, setShowPassword] = useState(false);
+  if (type === 'password' && !children) return (
+    <div className={'field ' + (wide ? 'wide' : '')}>
+      <label htmlFor={passwordId}>{label}{required && <b> *</b>}</label>
+      <div className="password-field">
+        <input id={passwordId} name={name} type={showPassword ? 'text' : 'password'}
+          value={value ?? ''} onChange={e => onChange?.(e.target.value)}
+          required={required} minLength={8} maxLength={128} spellCheck={false} autoCapitalize="none" />
+        <button type="button" className="password-toggle"
+          aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+          title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+          aria-controls={passwordId} aria-pressed={showPassword}
+          onClick={() => setShowPassword(visible => !visible)}>
+          {showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+        </button>
+      </div>
+    </div>
+  );
   return (
     <label className={'field ' + (wide ? 'wide' : '')}>
       <span>
@@ -243,7 +268,7 @@ async function api(path: string, body?: any) {
       : undefined,
   );
   const data: any = await r.json();
-  if (!r.ok) throw new Error(data.error || 'Không thể kết nối với hệ thống.');
+  if (!r.ok) throw Object.assign(new Error(data.error || 'Không thể kết nối với hệ thống.'), { status: r.status });
   return data;
 }
 export default function RecruitmentApp() {
@@ -262,6 +287,12 @@ export default function RecruitmentApp() {
     }, 3000);
     return () => window.clearTimeout(timer);
   }, [message]);
+  const [demo, setDemo] = useState(false);
+  async function googleLogin(link = false) {
+    setBusy(true);
+    try { const r = await api('/api/auth/google/start', {link, role:form.role || 'candidate'}); window.location.assign(r.url); }
+    catch(e) { setMessage({text:(e as Error).message,error:true}); setBusy(false); }
+  }
   const [companyId, setCompanyId] = useState('');
   const [companySearch, setCompanySearch] = useState('');
   const [onlyFollowed, setOnlyFollowed] = useState(false);
@@ -291,7 +322,7 @@ export default function RecruitmentApp() {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const res = await fetch('/api/data?q=' + encodeURIComponent(q.trim()), { signal: controller.signal });
+        const res = await fetch('/api/data?demo='+(demo?'1':'0')+'&q=' + encodeURIComponent(q.trim()), { signal: controller.signal });
         if (!res.ok) return;
         const result: any = await res.json();
         if (!controller.signal.aborted) {
@@ -300,14 +331,14 @@ export default function RecruitmentApp() {
       } catch { /* Typing and searching remain available when suggestions cannot load. */ }
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [q]);
+  }, [q,demo]);
   const [communicationTarget, setCommunicationTarget] = useState<{
     applicationId: string;
     create?: boolean;
   } | null>(null);
   function communicate(v: string, a: any) {
     navigate(v);
-    setCommunicationTarget({ applicationId: a.id, create: v === 'interviews' });
+    setCommunicationTarget({ applicationId: a.id });
   }
   const generation = useRef(0);
   const u = data.user;
@@ -336,62 +367,121 @@ export default function RecruitmentApp() {
       const result: any = await res.json();
       if (!res.ok) throw new Error(result.error || 'Không thể cập nhật ảnh.');
       setAvatarRevision(v => v + 1);
-      setMessage({ text: file ? 'Đã cập nhật ảnh đại diện.' : 'Đã xóa ảnh đại diện.' });
+      setMessage({ text: file ? 'Đã cập nhật ảnh đại diện.' : 'Đã xóa ảnh tải lên; sử dụng ảnh Google nếu đã liên kết.' });
     } catch (e) { setMessage({ text: (e as Error).message, error: true }); }
     finally { setBusy(false); }
   }
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetView = view) => {
     const n = ++generation.current;
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        company: companyId,
-        q: query,
-        location,
-        category,
-        experience,
-        type,
-        salary,
+        company: targetView === 'saved' ? '' : companyId,
+        demo: demo ? '1' : '0',
+        q: targetView === 'saved' ? '' : query,
+        location: targetView === 'saved' ? '' : location,
+        category: targetView === 'saved' ? '' : category,
+        experience: targetView === 'saved' ? '' : experience,
+        type: targetView === 'saved' ? '' : type,
+        salary: targetView === 'saved' ? '' : salary,
         sort,
-        page: String(page),
-        saved: view === 'saved' ? '1' : '0',
+        page: String(targetView === view ? page : 1),
+        saved: targetView === 'saved' ? '1' : '0',
       });
       const d = await api('/api/data?' + p);
-      if (n === generation.current) setData(d);
+      if (n === generation.current) {
+        setData(d);
+        if (targetView === view && Number.isInteger(d.page) && d.page !== page) setPage(d.page);
+      }
     } catch (e) {
       if (n === generation.current)
         setMessage({ text: (e as Error).message, error: true });
     } finally {
       if (n === generation.current) setLoading(false);
     }
-  }, [companyId, query, location, category, experience, type, salary, sort, page, view]);
+  }, [demo, companyId, query, location, category, experience, type, salary, sort, page, view]);
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
+    if (p.get('view') === 'interviews') {
+      p.set('view', 'email');
+      window.history.replaceState({}, '', '/?' + p.toString());
+    }
     setView(p.get('view') || 'jobs');
+    const google = p.get('google');
+    if(google) {
+      const messages:Record<string,string> = {success:'Đăng nhập thành công.', 'link-required':'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu, rồi vào Hồ sơ để liên kết Google.', 'already-linked':'Tài khoản Google đã liên kết với tài khoản khác.', cancelled:'Bạn đã hủy đăng nhập Google.',failed:'Không thể đăng nhập Google. Hãy thử lại hoặc kiểm tra cấu hình dịch vụ.'};
+      setMessage({text:messages[google] || 'Không thể đăng nhập Google.',error:google!=='success'});
+      p.delete('google'); window.history.replaceState({},'', '/'+(p.size?'?'+p.toString():''));
+    }
     setCompanyId(p.get('company') || '');
     setQuery(p.get('q') || '');
     setQ(p.get('q') || '');
     setReady(true);
-    const back = () =>
-      setView(
-        new URLSearchParams(window.location.search).get('view') || 'jobs',
-      );
+    const recovery = new URLSearchParams(window.location.hash.slice(1)).get('reset-password');
+    if (recovery) {
+      window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      setForm({ token: recovery }); setModal('reset-password');
+    }
+    const back = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'interviews') {
+        params.set('view', 'email');
+        window.history.replaceState({}, '', '/?' + params.toString());
+      }
+      setView(params.get('view') || 'jobs');
+      setCompanyId(params.get('company') || '');
+      setQuery(params.get('q') || '');
+      setQ(params.get('q') || '');
+      setLocation(''); setCategory(''); setExperience(''); setType(''); setSalary('');
+      setPage(1); setStatusFilter(''); setAppJob('');
+      setCommunicationTarget(null); setSelected(null); setModal(null); setMessage(null);
+    };
     window.addEventListener('popstate', back);
     return () => window.removeEventListener('popstate', back);
   }, []);
   useEffect(() => {
     if (ready) void load();
   }, [ready, load]);
-  function navigate(v: string) {
+  function navigate(v: string, company?: string) {
+    if (v === 'jobs') setCompanyId(company || '');
     setCommunicationTarget(null);
     setView(v);
     setPage(1);
     setStatusFilter('');
+    setAppJob('');
+    setSelected(null);
+    setModal(null);
     setMessage(null);
-    window.history.pushState({}, '', v === 'jobs' ? '/' : '/?view=' + v);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const destination = v === 'jobs' ? (company ? '/?company=' + encodeURIComponent(company) : '/') : '/?view=' + encodeURIComponent(v);
+    if (window.location.pathname + window.location.search !== destination)
+      window.history.pushState({}, '', destination);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const animations = Array.from(document.querySelectorAll('main, .recruitment-home')).map(element =>
+      element.animate(
+        [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }],
+        { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' },
+      ),
+    );
+    return () => animations.forEach(animation => animation.cancel());
+  }, [view]);
   function open(kind: string, values: any = {}) {
+    if (kind === 'moderate' && values.status === 'active') {
+      const job = data.managedJobs.find((j: any) => j.id === values.id);
+      if (job && job.company_status !== 'verified') {
+        setSelected(null);
+        navigate('manage-companies');
+        setMessage({ text: `Cần xác minh doanh nghiệp ${job.company_name} trước khi phê duyệt tin này.`, error: true });
+        return;
+      }
+    }
+    if (kind === 'job' && u?.role === 'employer' && (!data.company || data.company.status === 'blocked')) {
+      navigate('company');
+      setMessage({ text: data.company ? 'Doanh nghiệp đang bị khóa. Vui lòng liên hệ quản trị viên.' : 'Hãy tạo hồ sơ doanh nghiệp trước khi đăng tin.', error: !!data.company });
+      return;
+    }
     setMessage(null);
     if (kind === 'application' && values.status === 'submitted')
       values = { ...values, status: 'viewed' };
@@ -409,6 +499,14 @@ export default function RecruitmentApp() {
       setMessage({ text });
       return true;
     } catch (e) {
+      if ((e as Error & { status?: number }).status === 401) {
+        ++generation.current;
+        setData(blank);
+        navigate('jobs');
+        setConfirm(null);
+        setForm({});
+        setModal('login');
+      }
       setMessage({ text: (e as Error).message, error: true });
       return false;
     } finally {
@@ -493,9 +591,11 @@ export default function RecruitmentApp() {
     setBusy(true);
     try {
       await api('/api/auth', { action: 'logout' });
+      ++generation.current;
       setData(blank);
+      setOnlyFollowed(false);
       navigate('jobs');
-      await load();
+      if (view === 'jobs') await load();
     } catch (e) {
       setMessage({ text: (e as Error).message, error: true });
     } finally {
@@ -559,9 +659,12 @@ export default function RecruitmentApp() {
       setBusy(true);
       try {
         const d = await api('/api/auth', { ...form, action: modal });
+        ++generation.current;
+        setData({ ...blank, user: d.user });
         setModal(null);
-        navigate(d.user.role === 'candidate' ? 'jobs' : 'dashboard');
-        await load();
+        const destination = d.user.role === 'candidate' ? 'jobs' : 'dashboard';
+        navigate(destination);
+        await load(destination);
         setMessage({ text: 'Đăng nhập thành công.' });
       } catch (e) {
         setMessage({ text: (e as Error).message, error: true });
@@ -593,6 +696,7 @@ export default function RecruitmentApp() {
     }
     const actions: any = {
       profile: 'profile',
+      account: 'account-name',
       company: 'company',
       job: 'job-save',
       apply: 'apply',
@@ -607,7 +711,7 @@ export default function RecruitmentApp() {
         modal === 'apply'
           ? 'Đã nộp hồ sơ thành công.'
           : modal === 'job'
-            ? 'Tin đã được lưu. Tin gửi duyệt sẽ xuất hiện sau khi quản trị viên phê duyệt.'
+            ? (form.draft ? 'Đã lưu bản nháp, chưa gửi duyệt.' : 'Đã gửi tin chờ duyệt. Tin chỉ công khai sau khi doanh nghiệp được xác minh và tin được phê duyệt.')
             : 'Đã lưu thay đổi.',
       )
     ) {
@@ -623,22 +727,21 @@ export default function RecruitmentApp() {
     u?.role === 'admin'
       ? [
           ['dashboard', 'Tổng quan'],
+          ['manage-companies', 'Doanh nghiệp'],
           ['manage-jobs', 'Duyệt tin'],
           ['users', 'Người dùng'],
-          ['manage-companies', 'Doanh nghiệp'],
           ['categories', 'Danh mục'],
           ['audit', 'Nhật ký'],
-          ['email', 'Email'],
+          ['email', 'Cài đặt email'],
         ]
       : u?.role === 'employer'
         ? [
             ['dashboard', 'Tổng quan'],
             ['manage-jobs', 'Tin tuyển dụng'],
-            ['applications', 'Ứng viên'],
-            ['company', 'Doanh nghiệp'],
+            ['applications', 'Hồ sơ ứng tuyển'],
+            ['company', 'Hồ sơ công ty'],
             ['chat', 'Tin nhắn'],
-            ['interviews', 'Lịch phỏng vấn'],
-            ['email', 'Email'],
+            ['email', 'Cài đặt email'],
           ]
         : [
             ['jobs', 'Tìm việc làm'],
@@ -647,13 +750,37 @@ export default function RecruitmentApp() {
             ...(u
               ? ([
                   ['saved', 'Đã lưu'],
+                  ['recommendations', 'Gợi ý cho bạn'],
+                  ['cv-builder', 'Tạo CV'],
+                  ['salary', 'Tính lương'],
                   ['applications', 'Ứng tuyển'],
                   ['chat', 'Tin nhắn'],
-                  ['interviews', 'Lịch phỏng vấn'],
                   ['email', 'Email'],
                 ] as uNav[])
               : []),
           ];
+  const accountGroups: { title: string; items: uNav[] }[] = [
+    { title: 'Hồ sơ', items: [['profile', 'Hồ sơ & CV']] },
+    { title: 'Việc làm của tôi', items: [['saved', 'Việc làm đã lưu'], ['recommendations', 'Việc làm phù hợp'], ['applications', 'Hồ sơ đã ứng tuyển']] },
+    { title: 'Trao đổi & thông báo', items: [['chat', 'Tin nhắn'], ['email', 'Cài đặt email']] },
+  ];
+  const accountMenu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (accountMenu.current && !accountMenu.current.contains(event.target as Node)) accountMenu.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && accountMenu.current?.open) {
+        accountMenu.current.open = false;
+        accountMenu.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
+  }, []);
+  const allowedViews = ['jobs', 'companies', 'profile', 'account', 'email-settings', ...(u ? ['notifications', ...navItems.map(([v]) => v)] : ['saved','recommendations','cv-builder','salary','applications','chat','email'])];
+  const unavailableView = !allowedViews.includes(view);
   const managed = data.managedJobs.filter(
     (j: any) => !statusFilter || j.status === statusFilter,
   );
@@ -839,14 +966,6 @@ export default function RecruitmentApp() {
                     >
                       Nhắn tin
                     </button>
-                    {u?.role === 'employer' && (
-                      <button
-                        className="text-button"
-                        onClick={() => communicate('interviews', a)}
-                      >
-                        Hẹn phỏng vấn
-                      </button>
-                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -866,6 +985,7 @@ export default function RecruitmentApp() {
       )}
     </>
   );
+  if (!ready) return <div className="app-loading" role="status">Đang tải TalentHub…</div>;
   return (
     <>
       <header className="topbar">
@@ -874,12 +994,12 @@ export default function RecruitmentApp() {
           href="/"
           onClick={(e) => {
             e.preventDefault();
-            navigate('jobs');
+            navigate(u && u.role !== 'candidate' ? 'dashboard' : 'jobs');
           }}
         >
           <span className="brand-icon">t↗</span>talent<span>hub</span>
         </a>
-        {u?.role !== 'candidate' && <nav aria-label="Điều hướng chính">
+        <nav aria-label="Điều hướng chính">
           {u?.role === 'employer' || u?.role === 'admin' ? (
             <>
               <a
@@ -892,7 +1012,7 @@ export default function RecruitmentApp() {
                 Tìm việc làm
               </a>
               <a
-                className={view !== 'jobs' ? 'active' : ''}
+                className={['dashboard','manage-jobs','applications','company','users','manage-companies','categories','audit','chat','email'].includes(view) ? 'active' : ''}
                 href="/?view=dashboard"
                 onClick={(e) => {
                   e.preventDefault();
@@ -903,7 +1023,7 @@ export default function RecruitmentApp() {
               </a>
             </>
           ) : (
-            navItems.slice(0, 3).map(([v, t]) => (
+            ([['jobs', 'Tìm việc làm'], ['companies', 'Công ty'], ['salary', 'Tính lương']] as uNav[]).map(([v, t]) => (
               <a
                 key={v}
                 className={view === v ? 'active' : ''}
@@ -917,7 +1037,7 @@ export default function RecruitmentApp() {
               </a>
             ))
           )}
-        </nav>}
+        </nav>
         <div className="header-actions">
           {u ? (
             <>
@@ -929,15 +1049,22 @@ export default function RecruitmentApp() {
                 <Bell size={20} />
                 {countUnread > 0 && <b>{countUnread}</b>}
               </button>
-              <button
-                className="user-pill"
-                onClick={() =>
-                  navigate(u.role === 'candidate' ? 'profile' : 'dashboard')
-                }
-              >
-                <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} />
-                <span>{u.name.split(' ').slice(-2).join(' ')}</span>
-              </button>
+              {<details ref={accountMenu} className="candidate-account-menu">
+                <summary className="user-pill" aria-label="Menu tài khoản">
+                  <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} />
+                  <span>{u.name.split(' ').slice(-2).join(' ')} ▾</span>
+                </summary>
+                <nav aria-label="Tài khoản cá nhân">
+                  <div className="account-identity"><strong>{u.name}</strong><span>{u.email}</span><small>{labels[u.role]}</small></div>
+                  {[{ title: 'Tài khoản', items: [['account', 'Thông tin cá nhân'], ['email-settings', 'Cài đặt nhận email']] as uNav[] }, ...(u.role === 'candidate' ? accountGroups.map(group => ({ ...group, items: group.items.filter(([v]) => v !== 'email') })) : [])].map(group => <section className="account-menu-group" key={group.title}>
+                    <h3>{group.title}</h3>
+                    {group.items.map(([v, t]) => <button key={v} aria-current={view === v || (v === 'profile' && view === 'cv-builder') ? 'page' : undefined} onClick={() => {
+                      if (accountMenu.current) accountMenu.current.open = false;
+                      navigate(v);
+                    }}>{t}{v === 'saved' && data.saved.length > 0 && <small>{data.saved.length}</small>}</button>)}
+                  </section>)}
+                </nav>
+              </details>}
               <button
                 className="logout-button"
                 aria-label="Đăng xuất"
@@ -965,7 +1092,7 @@ export default function RecruitmentApp() {
           )}
         </div>
       </header>
-      {u && (
+      {u && u.role !== 'candidate' && (
         <div className="workspace-nav">
           <div className="container">
             {navItems.map(([v, t]) => (
@@ -1004,21 +1131,19 @@ export default function RecruitmentApp() {
           </button>
         </div>
       )}
-      {view === 'jobs' || view === 'saved' ? (
+      {view === 'jobs' || (view === 'saved' && u?.role === 'candidate') ? (
         <>
-          {view !== 'saved' && <section className="search-zone">
+          {view !== 'saved' && <section className="search-zone recruitment-home">
             <div className="container">
               <div className="career-hero">
               <div className="career-copy">
-              <div className="eyebrow"><span className="hero-dot" /> CƠ HỘI MỚI, HÀNH TRÌNH MỚI</div>
               <h1>
-                Tìm công việc <em>đúng với bạn.</em>
+                TalentHub — Tìm việc phù hợp, mở lối sự nghiệp
               </h1>
               <p>
-                Kết nối với doanh nghiệp phù hợp. Bắt đầu bước tiến tiếp theo.
+                Khám phá cơ hội mới và kết nối với nhà tuyển dụng.
               </p>
               </div>
-              <img className="career-art" src="/career-illustration.svg" alt="Minh họa không gian làm việc với cây xanh và những cơ hội nghề nghiệp mới" width="560" height="350" />
               </div>
               <form
                 className="searchbar"
@@ -1072,9 +1197,31 @@ export default function RecruitmentApp() {
                   </button>
                 ))}
               </div>
+              <div className="home-discovery">
+                <aside className="home-industries" aria-label="Ngành nghề phổ biến">
+                  <h2>Khám phá theo ngành nghề</h2>
+                  {['Kinh doanh', 'Marketing', 'Công nghệ thông tin', 'Tài chính & Kế toán', 'Nhân sự', 'Thiết kế & Sáng tạo'].map(name => (
+                    <button key={name} className={category === name ? 'selected' : ''} onClick={() => { setCategory(name); setPage(1); document.getElementById('home-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+                      <span>{name}</span><ChevronRight size={18} />
+                    </button>
+                  ))}
+                  <button className="home-all-industries" onClick={() => { setCategory(''); setPage(1); document.getElementById('home-results')?.scrollIntoView({ behavior: 'smooth' }); }}>Xem tất cả ngành nghề <ArrowRight size={16} /></button>
+                </aside>
+                <article className="home-career-banner">
+                  <div className="home-banner-copy">
+                    <span className="home-banner-label">CƠ HỘI CHO BƯỚC TIẾN MỚI</span>
+                    <h2>Công việc phù hợp.<br /><em>Tương lai rộng mở.</em></h2>
+                    <p>Tìm kiếm vị trí theo kỹ năng, kinh nghiệm và nơi bạn muốn làm việc.</p>
+                    <button className="primary" onClick={() => document.getElementById('home-results')?.scrollIntoView({ behavior: 'smooth' })}>Khám phá việc làm <ArrowRight size={18} /></button>
+                    <div className="home-banner-benefits"><span><BriefcaseBusiness size={16} /> Đa dạng ngành nghề</span><span><Search size={16} /> Tìm kiếm dễ dàng</span></div>
+                  </div>
+                  <img src="/career-illustration.svg" alt="Ứng viên chuẩn bị hồ sơ và tìm kiếm cơ hội nghề nghiệp" width="560" height="350" />
+                </article>
+              </div>
             </div>
           </section>}
-          <main className={'container job-layout' + (view === 'saved' ? ' saved-job-layout' : '')}>
+          {view === 'jobs' && data.demoEnabled && <div className="container catalog-mode"><label><input type="checkbox" checked={demo} onChange={e=>{setDemo(e.target.checked);setPage(1);}}/> Xem dữ liệu minh họa</label><span>{demo ? 'Đây là các tin mẫu, không phải lời mời tuyển dụng thật.' : 'Tin do nhà tuyển dụng đăng và đã được quản trị viên duyệt.'}</span></div>}
+          <main id="home-results" className={'container job-layout' + (view === 'saved' ? ' saved-job-layout' : ' home-job-layout')}>
             {view !== 'saved' && <aside
               className={
                 'filter-panel ' + (mobileFilters ? 'show-filters' : '')
@@ -1089,10 +1236,10 @@ export default function RecruitmentApp() {
                   <h2>
                     {view === 'saved'
                       ? 'Việc làm đã lưu'
-                      : 'Việc làm dành cho bạn'}
+                      : 'Khám phá việc làm'}
                   </h2>
                   <p>
-                    <strong>{data.total}</strong> {view === 'saved' ? 'việc làm đã lưu' : 'cơ hội đang chờ bạn khám phá'}
+                    <strong>{data.total}</strong> {view === 'saved' ? 'việc làm đã lưu' : 'việc làm phù hợp'}
                   </p>
                 </div>
                 {view !== 'saved' && <Pick
@@ -1167,11 +1314,9 @@ export default function RecruitmentApp() {
                 <div className="promo-icon">
                   <BriefcaseBusiness size={26} />
                 </div>
-                <span className="eyebrow">SẴN SÀNG CHO CƠ HỘI MỚI</span>
+                
                 <h2>
-                  Hồ sơ tốt.
-                  <br />
-                  Khởi đầu tốt.
+                  Hồ sơ ứng tuyển
                 </h2>
                 <p>
                   Chuẩn bị CV để ứng tuyển nhanh và theo dõi mọi cơ hội tại một
@@ -1190,7 +1335,7 @@ export default function RecruitmentApp() {
                 </div>
               </div>
               <div className="note">
-                <h4>Một hành trình rõ ràng</h4>
+                <h4>Theo dõi ứng tuyển</h4>
                 <p>
                   Tìm việc phù hợp, gửi CV và cập nhật trạng thái ứng tuyển ngay
                   trên TalentHub.
@@ -1205,7 +1350,15 @@ export default function RecruitmentApp() {
         </>
       ) : (
         <main className={'container workspace' + (view === 'chat' ? ' chat-page' : '')}>
-          {u && ['chat', 'interviews', 'email'].includes(view) && (
+          {!loading && unavailableView && <Empty title="Trang này không khả dụng">
+            <p>Đường dẫn không tồn tại hoặc không dành cho vai trò tài khoản của bạn.</p>
+            <button className="primary" onClick={() => navigate('jobs')}>Về trang tìm việc</button>
+          </Empty>}
+          {u?.role === 'candidate' && ['profile', 'cv-builder'].includes(view) && <nav className="section-tabs" aria-label="Quản lý hồ sơ và CV">
+            {([['profile', 'Hồ sơ & CV đã lưu'], ['cv-builder', 'Tạo CV']] as uNav[]).map(([v,t]) => <button key={v} aria-current={view === v ? 'page' : undefined} onClick={() => navigate(v)}>{t}</button>)}
+          </nav>}
+          {u?.role === 'candidate' && ['cv-builder','recommendations','salary'].includes(view) && <CareerPanel key={u.id+view} view={view} user={u} profile={data.profile} categories={data.categories} onJob={showJob}/>}
+          {u && !unavailableView && ['chat', 'email', 'email-settings'].includes(view) && (
             <CommunicationPanel
               key={view + u.id}
               view={view}
@@ -1246,7 +1399,7 @@ export default function RecruitmentApp() {
                       onClick={() => {
                         reset();
                         setCompanyId(c.id);
-                        navigate('jobs');
+                        navigate('jobs', c.id);
                       }}
                     >
                       Xem việc làm <ArrowRight size={16} />
@@ -1262,7 +1415,7 @@ export default function RecruitmentApp() {
               )}
             </>
           )}
-          {!u && !['companies'].includes(view) && (
+          {!loading && !u && !unavailableView && !['companies'].includes(view) && (
             <Empty title="Đăng nhập để tiếp tục">
               <p>Quản lý hồ sơ, lưu việc làm và theo dõi ứng tuyển của bạn.</p>
               <button className="primary" onClick={() => open('login')}>
@@ -1270,13 +1423,26 @@ export default function RecruitmentApp() {
               </button>
             </Empty>
           )}
+          {u && view === 'account' && <>
+            <div className="page-heading"><h1>Thông tin cá nhân</h1><p>Quản lý tên hiển thị và ảnh đại diện của bạn.</p></div>
+            <section className="panel personal-account">
+              <UserAvatar key={u.id + avatarRevision} name={u.name} revision={avatarRevision} large />
+              <div className="avatar-controls">
+                <label className="outline-button avatar-upload">Đổi ảnh đại diện<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} aria-label="Chọn ảnh đại diện" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void changeAvatar(file); }} /></label>
+                <button className="text-button" disabled={busy} onClick={() => void changeAvatar()}>Xóa ảnh tải lên</button>
+              </div>
+              <p className="muted">JPG, PNG, WebP; tối đa 2 MB.</p>
+              <dl><dt>Họ và tên</dt><dd>{u.name}</dd><dt>Email</dt><dd>{u.email}</dd><dt>Vai trò</dt><dd>{labels[u.role]}</dd></dl>
+              <button className="outline-button" onClick={() => open('account', { name: u.name })}>Chỉnh sửa họ tên</button>
+            </section>
+          </>}
           {u && view === 'profile' && (
             <>
               <div className="page-heading row">
                 <div>
                   <div className="eyebrow">HỒ SƠ CÁ NHÂN</div>
                   <h1>Xin chào, {u.name}.</h1>
-                  <p>Cập nhật thông tin để sẵn sàng cho cơ hội tiếp theo.</p>
+                  <p>Quản lý thông tin cá nhân và CV ứng tuyển.</p>
                 </div>
                 <button
                   className="outline-button"
@@ -1298,7 +1464,7 @@ export default function RecruitmentApp() {
                     </label>
                     <button className="text-button" disabled={busy} onClick={() => void changeAvatar()}>Xóa ảnh</button>
                   </div>
-                  <p className="muted">Chọn ảnh đang dùng trên Google hoặc ảnh từ máy. JPG, PNG, WebP; tối đa 2 MB.</p>
+                  <p className="muted">JPG, PNG, WebP; tối đa 2 MB. Khi xóa ảnh tải lên, ảnh Google đã liên kết sẽ được sử dụng.</p><button className="outline-button" disabled={busy || !data.googleReady} onClick={() => void googleLogin(true)}>{data.googleLinked ? "Cập nhật ảnh từ Google" : "Liên kết Google & lấy ảnh đại diện"}</button>{!data.googleReady && <p className="muted">Đăng nhập Google đang chờ quản trị viên cấu hình.</p>}
                   <h2>{u.name}</h2>
                   <p>
                     {data.profile?.headline || 'Chưa có tiêu đề nghề nghiệp'}
@@ -1490,6 +1656,7 @@ export default function RecruitmentApp() {
                 </div>
                 <button
                   className="primary"
+                  disabled={data.company?.status === 'blocked'}
                   onClick={() => open('company', data.company || {})}
                 >
                   {data.company ? 'Chỉnh sửa hồ sơ' : 'Tạo hồ sơ doanh nghiệp'}
@@ -1499,6 +1666,11 @@ export default function RecruitmentApp() {
                 <section className="panel company-profile">
                   <Building2 size={40} />
                   <Badge status={data.company.status} />
+                  <p className="workflow-note">{data.company.status === 'verified'
+                    ? 'Doanh nghiệp đã được xác minh. Tin tuyển dụng vẫn cần được duyệt riêng. Đổi tên công ty, mã số thuế hoặc địa chỉ cần xác minh lại. Cập nhật giới thiệu và website không làm gián đoạn tin đang tuyển.'
+                    : data.company.status === 'blocked'
+                      ? 'Doanh nghiệp đang bị khóa. Không thể chỉnh sửa hồ sơ hoặc đăng tin; vui lòng liên hệ quản trị viên.'
+                      : 'Hồ sơ công ty đang chờ xác minh. Bạn có thể chuẩn bị và gửi tin, nhưng tin chỉ công khai sau khi công ty và nội dung tin đều được duyệt.'}</p>
                   <h2>{data.company.name}</h2>
                   <p className="preline">{data.company.description}</p>
                   <p>
@@ -1532,7 +1704,7 @@ export default function RecruitmentApp() {
                         ? 'QUẢN TRỊ HỆ THỐNG'
                         : 'KHÔNG GIAN NHÀ TUYỂN DỤNG'}
                     </div>
-                    <h1>Tổng quan tuyển dụng</h1>
+                    <h1>{u.role === 'admin' ? 'Tổng quan hệ thống' : 'Tổng quan tuyển dụng'}</h1>
                     <p>
                       Xin chào {u.name}, đây là hoạt động tuyển dụng hiện tại.
                     </p>
@@ -1559,6 +1731,21 @@ export default function RecruitmentApp() {
                     </button>
                   )}
                 </div>
+                <section className="workflow-guide panel" aria-label="Công việc cần xử lý">
+                  <div>
+                    <h2>{u.role === 'admin' ? 'Thứ tự xử lý' : 'Quy trình tuyển dụng'}</h2>
+                    <p className="muted">{u.role === 'admin' ? 'Xác minh doanh nghiệp trước, sau đó kiểm duyệt tin. Các quyết định quản trị được lưu trong nhật ký.' : 'Hoàn thiện hồ sơ công ty → gửi tin chờ duyệt → xem hồ sơ ứng tuyển → trao đổi lịch phỏng vấn và kết quả qua email.'}</p>
+                  </div>
+                  <div className="workflow-actions">
+                    {u.role === 'admin' ? <>
+                      <button className="outline-button" onClick={() => { navigate('manage-companies'); setStatusFilter('pending'); }}>Doanh nghiệp chờ xác minh ({data.companies.filter((c: any) => c.status === 'pending').length})</button>
+                      <button className="outline-button" onClick={() => { navigate('manage-jobs'); setStatusFilter('pending'); }}>Tin chờ duyệt ({data.managedJobs.filter((j: any) => j.status === 'pending').length})</button>
+                    </> : <>
+                      <button className="outline-button" onClick={() => navigate('company')}>{!data.company ? 'Tạo hồ sơ công ty' : data.company.status === 'verified' ? 'Xem hồ sơ công ty' : data.company.status === 'blocked' ? 'Công ty đang bị khóa' : 'Công ty chờ xác minh'}</button>
+                      <button className="outline-button" onClick={() => { navigate('applications'); setStatusFilter('submitted'); }}>Hồ sơ mới ({data.applications.filter((a: any) => a.status === 'submitted').length})</button>
+                    </>}
+                  </div>
+                </section>
                 <div className="stats-grid">
                   {(u.role === 'admin'
                     ? [
@@ -1574,7 +1761,7 @@ export default function RecruitmentApp() {
                           BriefcaseBusiness,
                           'Tin đang tuyển',
                           data.managedJobs.filter(
-                            (j: any) => j.status === 'active',
+                            (j: any) => j.status === 'active' && j.company_status === 'verified',
                           ).length,
                         ],
                         [
@@ -1588,7 +1775,7 @@ export default function RecruitmentApp() {
                           BriefcaseBusiness,
                           'Tin đang tuyển',
                           data.managedJobs.filter(
-                            (j: any) => j.status === 'active',
+                            (j: any) => j.status === 'active' && j.company_status === 'verified',
                           ).length,
                         ],
                         [
@@ -1765,13 +1952,14 @@ export default function RecruitmentApp() {
                                         open('job', {
                                           ...j,
                                           tags: j.tags.join(', '),
-                                          draft: false,
+                                          draft: j.status === 'draft',
                                         })
                                       }
                                     >
                                       Chỉnh sửa
                                     </button>
-                                    <button
+                                    <button className="text-button" onClick={() => { navigate('applications'); setAppJob(j.id); }}>Xem hồ sơ</button>
+                                    {canCloseJob(j.status) && <button
                                       className="text-button"
                                       onClick={() =>
                                         setConfirm({
@@ -1786,7 +1974,7 @@ export default function RecruitmentApp() {
                                       }
                                     >
                                       Đóng tin
-                                    </button>
+                                    </button>}
                                   </>
                                 ) : (
                                   <>
@@ -1810,7 +1998,7 @@ export default function RecruitmentApp() {
                                         Duyệt
                                       </button>
                                     )}
-                                    <button
+                                    {(canModerateJob(j.status, 'rejected') || canModerateJob(j.status, 'hidden')) && <button
                                       className="text-button"
                                       onClick={() =>
                                         open('moderate', {
@@ -1826,7 +2014,7 @@ export default function RecruitmentApp() {
                                       {j.status === 'pending'
                                         ? 'Từ chối'
                                         : 'Ẩn tin'}
-                                    </button>
+                                    </button>}
                                   </>
                                 )}
                               </div>
@@ -1921,8 +2109,11 @@ export default function RecruitmentApp() {
                 <h1>Doanh nghiệp</h1>
                 <p>Xác minh thông tin và quản lý trạng thái doanh nghiệp.</p>
               </div>
+              <div className="toolbar">
+                <Pick value={statusFilter} onChange={setStatusFilter} options={['pending','verified','blocked'].map(s => ({ value:s, label:labels[s] }))} empty="Tất cả trạng thái" label="Trạng thái doanh nghiệp" />
+              </div>
               <div className="company-grid">
-                {data.companies.map((c: any) => (
+                {data.companies.filter((c: any) => !statusFilter || c.status === statusFilter).map((c: any) => (
                   <article className="panel" key={c.id}>
                     <h2>{c.name}</h2>
                     <Badge status={c.status} />
@@ -1946,6 +2137,7 @@ export default function RecruitmentApp() {
                   </article>
                 ))}
               </div>
+              {!data.companies.some((c: any) => !statusFilter || c.status === statusFilter) && <Empty title="Không có doanh nghiệp phù hợp">Thử chọn trạng thái khác để xem danh sách.</Empty>}
             </>
           )}
           {u?.role === 'admin' && view === 'categories' && (
@@ -2022,7 +2214,7 @@ export default function RecruitmentApp() {
         </main>
       )}
       <footer className="container">
-        <span>© 2026 TalentHub · Kết nối con người với cơ hội.</span>
+        <span>© 2026 TalentHub</span>
         <button className="text-button" onClick={() => open('about')}>
           Thông tin phiên bản
         </button>
@@ -2096,7 +2288,7 @@ export default function RecruitmentApp() {
                         Phê duyệt tin
                       </button>
                     )}
-                    <button
+                    {(canModerateJob(selected.status, 'rejected') || canModerateJob(selected.status, 'hidden')) && <button
                       className="outline-button"
                       onClick={() =>
                         open('moderate', {
@@ -2110,7 +2302,7 @@ export default function RecruitmentApp() {
                       }
                     >
                       Từ chối / Ẩn
-                    </button>
+                    </button>}
                   </>
                 ) : u?.role === 'employer' ? (
                   <p className="muted">
@@ -2139,11 +2331,11 @@ export default function RecruitmentApp() {
                     </button>
                     <button
                       className="outline-button"
-                      disabled={busy || selected.status !== 'active'}
+                      disabled={busy || (selected.status !== 'active' && !data.saved.includes(selected.id))}
                       onClick={() => save(selected)}
                     >
                       <Bookmark size={18} />
-                      {data.saved.includes(selected.id) ? 'Đã lưu' : 'Lưu việc'}
+                      {data.saved.includes(selected.id) ? 'Bỏ lưu' : 'Lưu việc'}
                     </button>
                   </>
                 )}
@@ -2181,9 +2373,12 @@ export default function RecruitmentApp() {
                 (
                   {
                     login: 'Chào mừng bạn trở lại',
+                    'forgot-password': 'Khôi phục mật khẩu',
+                    'reset-password': 'Đặt lại mật khẩu',
                     register: 'Tạo tài khoản TalentHub',
                     setup: 'Khởi tạo quản trị viên',
                     profile: 'Chỉnh sửa hồ sơ',
+                    account: 'Chỉnh sửa thông tin cá nhân',
                     company: 'Hồ sơ doanh nghiệp',
                     upload: 'Tải lên CV',
                     job: form.id
@@ -2202,7 +2397,7 @@ export default function RecruitmentApp() {
             </DialogTitle>
             <DialogDescription>
               {['login', 'register'].includes(modal || '')
-                ? 'Một tài khoản cho toàn bộ hành trình nghề nghiệp.'
+                ? 'Đăng nhập để lưu việc và quản lý hồ sơ ứng tuyển.'
                 : modal === 'setup'
                   ? 'Thiết lập lần đầu trong Site riêng tư của chủ sở hữu.'
                   : form.title || 'Cập nhật thông tin và lưu thay đổi.'}
@@ -2216,14 +2411,14 @@ export default function RecruitmentApp() {
               {message.text}
             </div>
           )}
-          {modal === 'about' ? (
+          {['forgot-password','reset-password'].includes(modal || '') ? <PasswordRecovery key={modal} token={modal === 'reset-password' ? form.token : undefined} onLogin={()=>open('login')} /> : modal === 'about' ? (
             <div className="preline">
               TalentHub triển khai các nghiệp vụ cốt lõi: hồ sơ và CV PDF, tìm
               việc, lưu việc, ứng tuyển, quản lý doanh nghiệp, duyệt tin, thông
               báo và phân quyền.
               <br />
               <br />
-              Đã tích hợp chat, lịch phỏng vấn và hàng đợi email Resend. Gửi
+              Đã tích hợp chat và hàng đợi email Resend. Gửi
               email thật cần cấu hình dịch vụ. AI matching chưa được tích hợp.
               Các tin mẫu được gắn nhãn minh họa.
             </div>
@@ -2249,6 +2444,7 @@ export default function RecruitmentApp() {
             <form className="form-stack" onSubmit={submit}>
               {['login', 'register', 'setup'].includes(modal || '') && (
                 <>
+                  {modal !== 'setup' && <><button type="button" className="outline-button" disabled={busy || !data.googleReady} onClick={() => void googleLogin()}>Tiếp tục với Google</button>{!data.googleReady && <p className="muted">Đăng nhập Google chưa được cấu hình.</p>}</>}
                   {modal !== 'login' && (
                     <Field
                       label="Họ và tên"
@@ -2281,12 +2477,14 @@ export default function RecruitmentApp() {
                   />
                   <Field
                     label="Mật khẩu (8–128 ký tự)"
+                    key={modal}
                     name="password"
                     type="password"
                     value={form.password}
                     onChange={set('password')}
                     required
                   />
+                  {modal === 'login' && <button type="button" className="text-button" onClick={()=>open('forgot-password')}>Quên mật khẩu?</button>}
                   {modal === 'login' ? (
                     <p className="muted">
                       Chưa có tài khoản?{' '}
@@ -2312,6 +2510,7 @@ export default function RecruitmentApp() {
                   ) : null}
                 </>
               )}
+              {modal === 'account' && <Field label="Họ và tên" name="name" value={form.name} onChange={set('name')} required />}
               {modal === 'profile' && (
                 <div className="form-grid">
                   <Field
