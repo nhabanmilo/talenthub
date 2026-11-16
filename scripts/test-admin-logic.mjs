@@ -16,7 +16,7 @@ const notice=(uid,content)=>stmt('INSERT INTO notifications(id,user_id,content,c
 const auditStmt=(u,action,ref,reason='')=>stmt('INSERT INTO audit_log(id,actor_id,action,reference_id,reason,created_at) VALUES(?,?,?,?,?,?)',id(),u.id,action,ref,reason,now());
 globalThis.__adminTest = {stmt,one,check,str,required,now,id,notice,auditStmt,canCloseJob,canModerateJob,
  all:async(sql,...args)=>database.prepare(sql).all(...args), current:async()=>user,
- env:{}, sampleJobs:[], categories:[], specialties:[], normalizeLocation:s=>s, googleReady:()=>false, remindSavedJobs:async()=>0, getChatGPTUser:async()=>null,
+ env:{}, sampleJobs:[], categories:[], specialties:[], normalizeLocation:s=>s, googleReady:()=>false, remindSavedJobs:async()=>0, setupEnabled:()=>false,
  today:()=> '2026-11-15', requireUser:async()=>user, csrf:()=>{}, deliverSafely:async()=>{},
  response:(data,status=200)=>Response.json(data,{status}), error:e=>Response.json({error:e.message},{status:e.status||500}),
  db:()=>({batch:async ops=>{database.exec('BEGIN');try {const results=[];for(const op of ops)results.push(await op.run());database.exec('COMMIT');return results;}catch(e){database.exec('ROLLBACK');throw e;}}})};
@@ -92,6 +92,18 @@ for (const role of ['candidate', 'employer', 'admin']) {
   assert.equal((await one("SELECT name FROM users WHERE id='candidate2'")).name,'candidate2');
   await post({action:'account-name',name:'   '},400);
 }
+await notice('admin', 'Read test one').run();
+await notice('admin', 'Read test two').run();
+const target = await one("SELECT id FROM notifications WHERE content='Read test one'");
+user={id:'candidate',role:'candidate'};
+await post({action:'notification-read',id:target.id});
+assert.equal((await one('SELECT is_read FROM notifications WHERE id=?',target.id)).is_read,0);
+user={id:'admin',role:'admin'};
+await post({action:'notification-read',id:target.id});
+await post({action:'notification-read',id:target.id});
+assert.equal((await one('SELECT is_read FROM notifications WHERE id=?',target.id)).is_read,1);
+assert.equal((await one("SELECT is_read FROM notifications WHERE content='Read test two'")).is_read,0);
+console.log('PASS notification read: owner only, single notification, repeated click safe.');
 delete globalThis.__adminTest;database.close();
 console.log('PASS role-specific reads: no internal notes for candidate, no cross-account applications/CVs/jobs, guest saved route and page clamping.');
 console.log('PASS candidate/employer: private CV ownership, duplicate applications, closed jobs, unsave unavailable jobs, cross-employer access, blocked company and unchanged-status notifications.');

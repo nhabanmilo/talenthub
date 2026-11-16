@@ -151,7 +151,7 @@ export async function GET(req: Request) {
       safeGooglePicture(info.picture),
     ).run();
     if (flow!.user_id && safeGooglePicture(info.picture))
-      await files().delete(`avatars/${user.id}/profile`);
+      await files()?.delete(`avatars/${user.id}/profile`);
     const login = await session(req, user);
     const headers = new Headers({
       Location: '/?google=success',

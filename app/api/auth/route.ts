@@ -16,7 +16,8 @@ import {
   sha,
   csrf,
 } from '@/lib/server';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { env } from 'cloudflare:workers';
+import { validSetupToken } from '@/lib/admin-setup';
 export async function POST(req: Request) {
   try {
     csrf(req);
@@ -86,10 +87,10 @@ export async function POST(req: Request) {
     let role = str(b.role);
     let setupIdentity = '';
     if (action === 'setup') {
-      const identity = await getChatGPTUser();
+      const authorized = await validSetupToken(env as { ADMIN_SETUP_TOKEN?: string }, b.setupToken);
       check(
-        identity,
-        'Chỉ chủ sở hữu Site đã đăng nhập mới có thể khởi tạo quản trị.',
+        authorized,
+        'Mã thiết lập không hợp lệ hoặc chưa được cấu hình.',
         403,
       );
       check(
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
         'Hệ thống đã có quản trị viên.',
         409,
       );
-      setupIdentity = identity!.userId;
+      setupIdentity = 'cloudflare-owner';
       role = 'admin';
     } else
       check(['candidate', 'employer'].includes(role), 'Vai trò không hợp lệ.');

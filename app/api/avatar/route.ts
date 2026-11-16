@@ -5,7 +5,7 @@ const key = (id: string) => `avatars/${id}/profile`;
 export async function GET(req: Request) {
   try {
     const u = await requireUser(req);
-    const image = await files().get(key(u.id));
+    const image = await files()?.get(key(u.id));
     if (!image) {
       const identity = await one('SELECT picture FROM google_identities WHERE user_id=?',u.id);
       const picture = safeGooglePicture(identity?.picture);
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
   try {
     csrf(req);
     const u = await requireUser(req);
+    check(files(), 'Tải ảnh trực tiếp không được hỗ trợ.', 400);
     check(Number(req.headers.get('content-length') || 0) <= 3 * 1024 * 1024, 'Ảnh tối đa 2 MB.', 413);
     const form = await req.formData();
     const file = form.get('file');
@@ -44,7 +45,7 @@ export async function DELETE(req: Request) {
   try {
     csrf(req);
     const u = await requireUser(req);
-    await files().delete(key(u.id));
+    await files()?.delete(key(u.id));
     return response({ ok: true });
   } catch (e) { return error(e); }
 }

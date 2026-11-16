@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       ),
       stmt(
         `INSERT INTO notifications(id,user_id,content,created_at) SELECT ?,?,?,? WHERE changes()=1`,
-        id(),
+        `chat:${a.id}:${id()}`,
         recipient,
         `${u.name} gửi tin nhắn mới về vị trí ${a.job_title}.`,
         stamp,

@@ -26,7 +26,7 @@ import {
   auditStmt,
 } from '@/lib/server';
 import { sampleJobs, categories as seedCategories } from '@/app/seed';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { setupEnabled } from '@/lib/admin-setup';
 export const dynamic = 'force-dynamic';
 async function seedCatalog() {
   if (await one("SELECT id FROM setup WHERE id='categories_initialized'")) return;
@@ -53,6 +53,10 @@ export async function GET(req: Request) {
   try {
     await seedCatalog();
     const u = await current(req);
+    if (new URL(req.url).searchParams.get('notifications') === '1') {
+      check(u, 'Vui lòng đăng nhập.', 401);
+      return response({ notifications: await all('SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100', u!.id) });
+    }
     if (u?.role === 'candidate') {
       const created = await remindSavedJobs(u.id);
       if (created) await deliverSafely();
@@ -148,6 +152,7 @@ export async function GET(req: Request) {
     const data: any = {
       user: u,
       demoEnabled,
+      companyProfile: params.get('company') ? await one("SELECT id,name,description,address,website,status,is_demo FROM companies WHERE id=?" + (u?.role === 'admin' ? '' : " AND status='verified'"), params.get('company')) : null,
       googleReady: googleReady(),
       googleLinked: u ? !!(await one('SELECT subject FROM google_identities WHERE user_id=?',u.id)) : false,
       jobs,
@@ -175,7 +180,7 @@ export async function GET(req: Request) {
     if (!u) {
       data.needsSetup =
         !(await one('SELECT id FROM users WHERE role=?', 'admin')) &&
-        !!(await getChatGPTUser());
+        setupEnabled(env as { ADMIN_SETUP_TOKEN?: string });
       return response(data);
     }
     data.profile = await one('SELECT * FROM profiles WHERE user_id=?', u.id);
@@ -189,7 +194,7 @@ export async function GET(req: Request) {
         await all('SELECT job_id FROM saved_jobs WHERE candidate_id=?', u.id)
       ).map((x) => x.job_id);
       data.resumes = await all(
-        'SELECT id,title,size,is_default,created_at FROM resumes WHERE candidate_id=? AND deleted=0 ORDER BY is_default DESC,created_at DESC',
+        'SELECT id,title,size,content_type,is_default,created_at FROM resumes WHERE candidate_id=? AND deleted=0 ORDER BY is_default DESC,created_at DESC',
         u.id,
       );
       data.applications = await all(
@@ -379,7 +384,7 @@ async function mutate(req: Request) {
         ),
         stmt(
           'INSERT INTO notifications(id,user_id,content,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=?)',
-          id(),
+          `application-submitted:${appId}`,
           u.id,
           `Đã nộp hồ sơ cho vị trí ${j.title}.`,
           now(),
@@ -571,6 +576,11 @@ async function mutate(req: Request) {
         ),
         ...(a.status !== b.status ? [notice(a.candidate_id, `Hồ sơ ${a.title}: ${labels[b.status]}.`)] : []),
       ]);
+      return response({ ok: true });
+    }
+    if (action === 'notification-read') {
+      check(ref, 'Thiếu mã thông báo.');
+      await stmt('UPDATE notifications SET is_read=1 WHERE id=? AND user_id=?', ref, u.id).run();
       return response({ ok: true });
     }
     if (action === 'notifications-read') {

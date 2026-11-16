@@ -1,3 +1,4 @@
+import { resumeLink } from '@/lib/resume-link';
 import { requireUser, one, check, files, error } from '@/lib/server';
 export async function GET(
   req: Request,
@@ -23,6 +24,14 @@ export async function GET(
         u.id,
       ));
     check(allowed, 'Bạn không có quyền truy cập CV này.', 403);
+    if (r.content_type === 'text/uri-list') {
+      const url = resumeLink(r.object_key);
+      check(url, 'Đường dẫn CV không hợp lệ.', 400);
+      return new Response(null, { status: 302, headers: {
+        Location: url!, 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer',
+      } });
+    }
+    check(files(), 'CV cũ chưa có trên máy chủ này. Vui lòng thêm đường dẫn CV mới.', 404);
     const obj = await files().get(r.object_key);
     check(obj, 'Tệp không còn tồn tại.', 404);
     return new Response(obj!.body, {
