@@ -7,8 +7,6 @@ import {
   CareerDocument,
   CareerPreferences,
   CareerJob,
-  salary2026,
-  grossFromNet,
 } from '@/lib/career';
 import { locations } from '@/lib/locations';
 import {
@@ -171,7 +169,6 @@ export default function CareerPanel({
       },
     });
   }
-  if (view === 'salary') return <SalaryCalculator />;
   return (
     <div className="career-panel">
       <div className="page-heading">
@@ -459,145 +456,5 @@ export default function CareerPanel({
         </>
       )}
     </div>
-  );
-}
-function SalaryCalculator() {
-  const [amount, setAmount] = useState('25000000'),
-    [insurance, setInsurance] = useState('2625000'),
-    [dependents, setDependents] = useState('0'),
-    [direction, setDirection] = useState('gross');
-  let result: ReturnType<typeof salary2026> | null = null,
-    error = '';
-  try {
-    result = (direction === 'gross' ? salary2026 : grossFromNet)(
-      Number(amount),
-      Number(insurance),
-      Number(dependents),
-    );
-  } catch (e) {
-    error = (e as Error).message;
-  }
-  const money = (n: number) =>
-    new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      maximumFractionDigits: 0,
-    }).format(n);
-  return (
-    <>
-      <div className="page-heading">
-        <div className="eyebrow">HIỂU RÕ THU NHẬP</div>
-        <h1>Tính lương Gross ↔ Net</h1>
-        <p>
-          Ước tính hàng tháng năm 2026 cho cá nhân cư trú, hợp đồng lao động từ
-          3 tháng.
-        </p>
-      </div>
-      <div className="salary-layout">
-        <section className="panel form-stack">
-          <div className="career-field">
-            Chiều quy đổi
-            <Choice
-              label="Chiều quy đổi"
-              value={direction}
-              options={[
-                { value: 'gross', label: 'Gross → Net' },
-                { value: 'net', label: 'Net → Gross' },
-              ]}
-              onChange={setDirection}
-            />
-          </div>
-          <label>
-            Lương {direction} (VNĐ/tháng)
-            <input
-              type="number"
-              min="0"
-              max="1000000000000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-          <label>
-            Bảo hiểm người lao động đóng (VNĐ/tháng)
-            <input
-              type="number"
-              min="0"
-              value={insurance}
-              onChange={(e) => setInsurance(e.target.value)}
-            />
-          </label>
-          <p className="muted">
-            Nhập tổng BHXH, BHYT, BHTN thực tế trên bảng lương. Ví dụ sẵn có là
-            2.625.000đ; hãy sửa theo mức đóng của bạn. Khi quy đổi Net → Gross,
-            khoản này được giữ cố định.
-          </p>
-          <label>
-            Số người phụ thuộc được giảm trừ
-            <input
-              type="number"
-              min="0"
-              max="20"
-              step="1"
-              value={dependents}
-              onChange={(e) => setDependents(e.target.value)}
-            />
-          </label>
-        </section>
-        <section className="panel salary-result" aria-live="polite">
-          {error ? (
-            <p>{error}</p>
-          ) : (
-            result && (
-              <>
-                <p>
-                  {direction === 'gross'
-                    ? 'THỰC NHẬN ƯỚC TÍNH'
-                    : 'GROSS ƯỚC TÍNH'}
-                </p>
-                <h2>
-                  {money(direction === 'gross' ? result.net : result.gross)}
-                </h2>
-                {Object.entries({
-                  Gross: result.gross,
-                  'Bảo hiểm': result.insurance,
-                  'Giảm trừ gia cảnh': result.deduction,
-                  'Thu nhập tính thuế': result.taxable,
-                  'Thuế TNCN': result.tax,
-                  Net: result.net,
-                }).map(([label, n]) => (
-                  <div className="row" key={label}>
-                    <span>{label}</span>
-                    <strong>{money(n)}</strong>
-                  </div>
-                ))}
-              </>
-            )
-          )}
-        </section>
-      </div>
-      <p className="muted">
-        Chưa bao gồm thu nhập miễn thuế, các khoản giảm trừ khác hay khấu trừ
-        nội bộ. Kết quả là ước tính theo số liệu bạn nhập.
-      </p>
-      <p className="muted">
-        Căn cứ:{' '}
-        <a
-          href="https://xaydungchinhsach.chinhphu.vn/quy-dinh-moi-ve-khau-tru-thue-thu-nhap-ca-nhan-119260703150410707.htm"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Biểu thuế lũy tiến 2026
-        </a>{' '}
-        ·{' '}
-        <a
-          href="https://xaydungchinhsach.chinhphu.vn/quy-dinh-giam-tru-gia-canh-trong-thue-thu-nhap-ca-nhan-119260327071750084.htm"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Giảm trừ 15,5 triệu + 6,2 triệu/người phụ thuộc
-        </a>
-        .
-      </p>
-    </>
   );
 }

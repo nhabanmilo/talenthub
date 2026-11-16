@@ -752,7 +752,6 @@ export default function RecruitmentApp() {
                   ['saved', 'Đã lưu'],
                   ['recommendations', 'Gợi ý cho bạn'],
                   ['cv-builder', 'Tạo CV'],
-                  ['salary', 'Tính lương'],
                   ['applications', 'Ứng tuyển'],
                   ['chat', 'Tin nhắn'],
                   ['email', 'Email'],
@@ -779,7 +778,7 @@ export default function RecruitmentApp() {
     document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
   }, []);
-  const allowedViews = ['jobs', 'companies', 'profile', 'account', 'email-settings', ...(u ? ['notifications', ...navItems.map(([v]) => v)] : ['saved','recommendations','cv-builder','salary','applications','chat','email'])];
+  const allowedViews = ['jobs', 'companies', 'profile', 'account', 'email-settings', ...(u ? ['notifications', ...navItems.map(([v]) => v)] : ['saved','recommendations','cv-builder','applications','chat','email'])];
   const unavailableView = !allowedViews.includes(view);
   const managed = data.managedJobs.filter(
     (j: any) => !statusFilter || j.status === statusFilter,
@@ -1023,7 +1022,7 @@ export default function RecruitmentApp() {
               </a>
             </>
           ) : (
-            ([['jobs', 'Tìm việc làm'], ['companies', 'Công ty'], ['salary', 'Tính lương']] as uNav[]).map(([v, t]) => (
+            ([['jobs', 'Tìm việc làm'], ['companies', 'Công ty']] as uNav[]).map(([v, t]) => (
               <a
                 key={v}
                 className={view === v ? 'active' : ''}
@@ -1357,7 +1356,7 @@ export default function RecruitmentApp() {
           {u?.role === 'candidate' && ['profile', 'cv-builder'].includes(view) && <nav className="section-tabs" aria-label="Quản lý hồ sơ và CV">
             {([['profile', 'Hồ sơ & CV đã lưu'], ['cv-builder', 'Tạo CV']] as uNav[]).map(([v,t]) => <button key={v} aria-current={view === v ? 'page' : undefined} onClick={() => navigate(v)}>{t}</button>)}
           </nav>}
-          {u?.role === 'candidate' && ['cv-builder','recommendations','salary'].includes(view) && <CareerPanel key={u.id+view} view={view} user={u} profile={data.profile} categories={data.categories} onJob={showJob}/>}
+          {u?.role === 'candidate' && ['cv-builder','recommendations'].includes(view) && <CareerPanel key={u.id+view} view={view} user={u} profile={data.profile} categories={data.categories} onJob={showJob}/>}
           {u && !unavailableView && ['chat', 'email', 'email-settings'].includes(view) && (
             <CommunicationPanel
               key={view + u.id}
